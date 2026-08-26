@@ -9,7 +9,7 @@ const distDir = path.join(projectRoot, 'dist');
 const publicPort = Number(process.env.PORT ?? 8787);
 const geminiKey = process.env.GEMINI_API_KEY?.trim() ?? '';
 const geminiModel = process.env.GEMINI_MODEL?.trim() || 'gemini-3.7-flash';
-const geminiFallbackModel = process.env.GEMINI_FALLBACK_MODEL?.trim() || 'gemini-2.5-flash';
+const geminiFallbackModel = process.env.GEMINI_FALLBACK_MODEL?.trim() || 'gemini-3.6-flash';
 
 const mimeTypes = new Map([
   ['.html', 'text/html; charset=utf-8'],
