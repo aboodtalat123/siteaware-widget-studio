@@ -171,18 +171,31 @@ function buildPrompt(body) {
 }
 
 function isRetryableGeminiFailure(status, message) {
-  return status === 429 || status === 503 || /high demand|temporar|rate limit|overload/i.test(message);
+  return status === 429 || status === 503 || status === 504 || /high demand|temporar|rate limit|overload|timed? out|timeout/i.test(message);
 }
 
 async function requestGemini(model, prompt) {
-  const geminiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': geminiKey,
-    },
-    body: JSON.stringify({ model, input: prompt }),
-  });
+  let geminiResponse;
+  try {
+    geminiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': geminiKey,
+      },
+      body: JSON.stringify({ model, input: prompt }),
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (error) {
+    const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+    return {
+      ok: false,
+      status: timedOut ? 504 : 502,
+      parsed: null,
+      rawText: '',
+      message: timedOut ? `${model} timed out after 30 seconds.` : error instanceof Error ? error.message : 'Gemini connection failed.',
+    };
+  }
 
   const rawText = await geminiResponse.text();
   let parsed = null;
