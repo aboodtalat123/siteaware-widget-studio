@@ -9,6 +9,7 @@ const distDir = path.join(projectRoot, 'dist');
 const publicPort = Number(process.env.PORT ?? 8787);
 const geminiKey = process.env.GEMINI_API_KEY?.trim() ?? '';
 const geminiModel = process.env.GEMINI_MODEL?.trim() || 'gemini-3.7-flash';
+const geminiFallbackModel = process.env.GEMINI_FALLBACK_MODEL?.trim() || 'gemini-2.5-flash';
 
 const mimeTypes = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -169,6 +170,37 @@ function buildPrompt(body) {
   ].join('\n');
 }
 
+function isRetryableGeminiFailure(status, message) {
+  return status === 429 || status === 503 || /high demand|temporar|rate limit|overload/i.test(message);
+}
+
+async function requestGemini(model, prompt) {
+  const geminiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': geminiKey,
+    },
+    body: JSON.stringify({ model, input: prompt }),
+  });
+
+  const rawText = await geminiResponse.text();
+  let parsed = null;
+  try {
+    parsed = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    parsed = null;
+  }
+
+  return {
+    ok: geminiResponse.ok,
+    status: geminiResponse.status,
+    parsed,
+    rawText,
+    message: parsed?.error?.message ?? (rawText || 'Gemini request failed.'),
+  };
+}
+
 async function handleChat(request, response) {
   if (!geminiKey) {
     sendJson(response, 503, {
@@ -200,46 +232,38 @@ async function handleChat(request, response) {
   const prompt = buildPrompt(body);
 
   try {
-    const geminiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': geminiKey,
-      },
-      body: JSON.stringify({
-        model: geminiModel,
-        input: prompt,
-      }),
-    });
+    const candidateModels = [...new Set([geminiModel, geminiFallbackModel].filter(Boolean))];
+    let lastFailure = null;
 
-    const rawText = await geminiResponse.text();
-    let parsed = null;
-    try {
-      parsed = rawText ? JSON.parse(rawText) : null;
-    } catch {
-      parsed = null;
+    for (const model of candidateModels) {
+      const result = await requestGemini(model, prompt);
+      if (result.ok) {
+        const reply = extractGeminiText(result.parsed) || result.rawText.trim();
+        sendJson(response, 200, {
+          ok: true,
+          mode: 'ready',
+          provider: 'gemini',
+          model,
+          fallbackUsed: model !== geminiModel,
+          reply,
+          message: model === geminiModel ? 'Gemini reply generated.' : `Gemini reply generated with fallback model ${model}.`,
+        });
+        return;
+      }
+
+      lastFailure = { ...result, model };
+      if (!isRetryableGeminiFailure(result.status, result.message)) {
+        break;
+      }
     }
 
-    if (!geminiResponse.ok) {
-      sendJson(response, geminiResponse.status, {
-        ok: false,
-        mode: 'error',
-        provider: 'gemini',
-        model: geminiModel,
-        reply: '',
-        message: parsed?.error?.message ?? (rawText || 'Gemini request failed.'),
-      });
-      return;
-    }
-
-    const reply = extractGeminiText(parsed) || rawText.trim();
-    sendJson(response, 200, {
-      ok: true,
-      mode: 'ready',
+    sendJson(response, lastFailure?.status ?? 502, {
+      ok: false,
+      mode: 'error',
       provider: 'gemini',
-      model: geminiModel,
-      reply,
-      message: 'Gemini reply generated.',
+      model: lastFailure?.model ?? geminiModel,
+      reply: '',
+      message: lastFailure?.message ?? 'Gemini request failed.',
     });
   } catch (error) {
     sendJson(response, 500, {

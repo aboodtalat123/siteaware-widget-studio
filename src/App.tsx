@@ -936,154 +936,182 @@ function App() {
                   <span />
                 </div>
               </div>
-
-              <div className="mock-site">
-                <div className="mock-hero">
-                  <span className="mock-kicker">{locale === 'ar' ? 'موقع تجريبي تفاعلي' : 'Interactive mock website'}</span>
-                  <h3>{currentSite.name}</h3>
-                  <p>{currentSite.blurb}</p>
-                </div>
-
-                <div className="mock-content">
-                  {currentSite.lines.map((line, index) => (
-                    <div key={line} className={classNames('mock-row', index === 2 && 'highlight')}>
-                      <span>{line}</span>
-                      <button>{locale === 'ar' ? 'افتح' : 'Open'}</button>
+              <div className="preview-split" dir="ltr">
+                <div className="assistant-dock" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
+                  <div
+                    className={classNames(
+                      'widget-shell',
+                      `shell-${config.chatShell}`,
+                      `header-${config.header}`,
+                      `assistant-${config.assistantMessage}`,
+                      `user-${config.userMessage}`,
+                      `input-${config.inputBar}`,
+                      `send-${config.sendButton}`,
+                      `source-${config.sourceCitation}`,
+                      `cta-${config.takeMeThere}`,
+                      widgetOpen && 'open',
+                    )}
+                  >
+                    <div className="preview-zone-label assistant-zone-label">
+                      <span>{locale === 'ar' ? 'معاينة المساعد' : 'Assistant preview'}</span>
+                      <strong>{locale === 'ar' ? 'أقصى اليسار' : 'Far left'}</strong>
                     </div>
-                  ))}
-                </div>
-
-                <div
-                  className={classNames(
-                    'launcher-node',
-                    `launcher-${config.launcher}`,
-                    `launcher-size-${config.appearance.launcherSize}`,
-                    !widgetOpen && 'open',
-                  )}
-                >
-                <div className="launcher-preview">{currentIconPreview}</div>
-                  <div className="launcher-copy">
-                    <strong>SiteAware</strong>
-                    <span>{locale === 'ar' ? 'اسأل الموقع' : 'Ask the site'}</span>
-                  </div>
-                  <span className="launcher-badge">3</span>
-                </div>
-
-                <div
-                  className={classNames(
-                    'widget-shell',
-                    `shell-${config.chatShell}`,
-                    `header-${config.header}`,
-                    `assistant-${config.assistantMessage}`,
-                    `user-${config.userMessage}`,
-                    `input-${config.inputBar}`,
-                    `send-${config.sendButton}`,
-                    `source-${config.sourceCitation}`,
-                    `cta-${config.takeMeThere}`,
-                    widgetOpen && 'open',
-                  )}
-                  style={{
-                    width: 'min(var(--widget-width), calc(100% - 52px))',
-                    height: 'min(var(--widget-height), 100%)',
-                    maxHeight: 'calc(100% - 40px)',
-                  }}
-                >
-                  <div className={classNames('widget-header', config.header)}>
-                    <div className="widget-title">
-                      <div className="widget-avatar">{currentIconPreview}</div>
-                      <div>
-                        <strong>SiteAware</strong>
-                        <span>{locale === 'ar' ? `المساعد التجريبي على ${currentSite.vibe}` : `Mock assistant on ${currentSite.vibe}`}</span>
+                    <div className={classNames('widget-header', config.header)}>
+                      <div className="widget-title">
+                        <div className="widget-avatar">{currentIconPreview}</div>
+                        <div>
+                          <strong>SiteAware</strong>
+                          <span>{locale === 'ar' ? `المساعد التجريبي على ${currentSite.vibe}` : `Mock assistant on ${currentSite.vibe}`}</span>
+                        </div>
+                      </div>
+                      <div className="widget-actions">
+                        <button className="action-icon" type="button">
+                          −
+                        </button>
+                        <button className="action-icon" type="button">
+                          ×
+                        </button>
                       </div>
                     </div>
-                    <div className="widget-actions">
-                      <button className="action-icon">−</button>
-                      <button className="action-icon">×</button>
-                    </div>
-                  </div>
 
-                  <div className="conversation" aria-live="polite">
-                    {conversation.map((message) => {
-                      if (message.role === 'user') {
-  return (
-                          <div key={message.id} className={classNames('message-row', 'user-row')}>
-                            <div className={classNames('message-card', 'user-message')}>
+                    <div className="conversation" aria-live="polite">
+                      {conversation.map((message) => {
+                        if (message.role === 'user') {
+                          return (
+                            <div key={message.id} className={classNames('message-row', 'user-row')}>
+                              <div className={classNames('message-card', 'user-message')}>
+                                <p>{message.text}</p>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div key={message.id} className={classNames('message-row', 'assistant-row')}>
+                            <div className="message-avatar">{currentIconPreview}</div>
+                            <div className={classNames('message-card', 'assistant-message')}>
+                              <div className="message-meta">
+                                <span>SiteAware</span>
+                                {message.status === 'typing' ? <span className="status-dot">{locale === 'ar' ? 'يكتب' : 'typing'}</span> : null}
+                                {message.status === 'loading' ? <span className="status-dot status-loading">{locale === 'ar' ? 'جاري' : 'loading'}</span> : null}
+                                {message.status === 'error' ? <span className="status-dot status-error">{locale === 'ar' ? 'خطأ' : 'error'}</span> : null}
+                              </div>
                               <p>{message.text}</p>
+                              {message.sources?.length ? (
+                                <div className="source-block">
+                                  <div className="source-label">{currentSourceLabel}</div>
+                                  <div className="source-pills">
+                                    {message.sources.map((source, index) => (
+                                      <span key={source} className="source-pill">
+                                        {index + 1}. {source}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+                              {message.action ? (
+                                <div className="action-row">
+                                  <button className="cta-button" type="button">
+                                    {currentCtaLabel || message.action}
+                                  </button>
+                                  <button className="ghost-button subtle" type="button">
+                                    {locale === 'ar' ? 'عرض المصدر' : 'View source'}
+                                  </button>
+                                </div>
+                              ) : null}
                             </div>
                           </div>
                         );
-                      }
+                      })}
 
-                      return (
-                        <div key={message.id} className={classNames('message-row', 'assistant-row')}>
-                          <div className="message-avatar">{currentIconPreview}</div>
-                          <div className={classNames('message-card', 'assistant-message')}>
-                            <div className="message-meta">
-                              <span>SiteAware</span>
-                              {message.status === 'typing' ? <span className="status-dot">{locale === 'ar' ? 'يكتب' : 'typing'}</span> : null}
-                              {message.status === 'loading' ? <span className="status-dot status-loading">{locale === 'ar' ? 'جاري' : 'loading'}</span> : null}
-                              {message.status === 'error' ? <span className="status-dot status-error">{locale === 'ar' ? 'خطأ' : 'error'}</span> : null}
-                            </div>
-                            <p>{message.text}</p>
-                            {message.sources?.length ? (
-                              <div className="source-block">
-                                <div className="source-label">{currentSourceLabel}</div>
-                                <div className="source-pills">
-                                  {message.sources.map((source, index) => (
-                                    <span key={source} className="source-pill">
-                                      {index + 1}. {source}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            ) : null}
-                            {message.action ? (
-                              <div className="action-row">
-                                <button className="cta-button">{currentCtaLabel || message.action}</button>
-                                <button className="ghost-button subtle">{locale === 'ar' ? 'عرض المصدر' : 'View source'}</button>
-                              </div>
-                            ) : null}
-                          </div>
+                      {isTyping ? (
+                        <div className="typing-row">
+                          <span className="typing-dot" />
+                          <span className="typing-dot" />
+                          <span className="typing-dot" />
                         </div>
-                      );
-                    })}
+                      ) : null}
+                    </div>
 
-                    {isTyping ? (
-                      <div className="typing-row">
-                        <span className="typing-dot" />
-                        <span className="typing-dot" />
-                        <span className="typing-dot" />
-                      </div>
-                    ) : null}
-                  </div>
+                    <div className={classNames('composer', 'widget-input')}>
+                      <input
+                        value={composer}
+                        onChange={(event) => setComposer(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            runTest();
+                          }
+                        }}
+                        placeholder={locale === 'ar' ? 'اكتب سؤالك...' : 'Ask a question about this site...'}
+                      />
+                      <button className="send-button" onClick={runTest} type="button">
+                        {locale === 'ar' ? 'إرسال' : 'Send'}
+                      </button>
+                    </div>
 
-                  <div className={classNames('composer', 'widget-input')}>
-                    <input
-                      value={composer}
-                      onChange={(event) => setComposer(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          runTest();
-                        }
-                      }}
-                      placeholder={locale === 'ar' ? 'اكتب سؤالك...' : 'Ask a question about this site...'}
-                    />
-                    <button className="send-button" onClick={runTest}>
-                      {locale === 'ar' ? 'إرسال' : 'Send'}
-                    </button>
+                    <div className="composer-actions">
+                      <button className="ghost-button" onClick={runTest} type="button">
+                        {locale === 'ar' ? 'معاينة / اختبار' : 'Preview / Test'}
+                      </button>
+                      <button className="ghost-button subtle" onClick={triggerErrorDemo} type="button">
+                        {locale === 'ar' ? 'حالة خطأ' : 'Error state'}
+                      </button>
+                      <span className={classNames('status-line', status)}>
+                        {locale === 'ar' ? 'الحالة' : 'status'}: {mode}
+                      </span>
+                    </div>
                   </div>
+                </div>
 
-                  <div className="composer-actions">
-                    <button className="ghost-button" onClick={runTest}>
-                      {locale === 'ar' ? 'معاينة / اختبار' : 'Preview / Test'}
-                    </button>
-                    <button className="ghost-button subtle" onClick={triggerErrorDemo}>
-                      {locale === 'ar' ? 'حالة خطأ' : 'Error state'}
-                    </button>
-                    <span className={classNames('status-line', status)}>
-                      {locale === 'ar' ? 'الحالة' : 'status'}: {mode}
-                    </span>
+                <div className="site-canvas" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
+                  <div className="mock-site">
+                    <div className="preview-zone-label site-zone-label">
+                      <span>{locale === 'ar' ? 'الموقع التجريبي' : 'Demo website'}</span>
+                      <strong>{locale === 'ar' ? 'يتقلص عند فتح المساعد' : 'Shrinks beside the assistant'}</strong>
+                    </div>
+                    <div className="mock-hero">
+                      <span className="mock-kicker">{locale === 'ar' ? 'موقع تجريبي تفاعلي' : 'Interactive mock website'}</span>
+                      <h3>{currentSite.name}</h3>
+                      <p>{currentSite.blurb}</p>
+                    </div>
+
+                    <div className="mock-content">
+                      {currentSite.lines.map((line, index) => (
+                        <div key={line} className={classNames('mock-row', index === 2 && 'highlight')}>
+                          <span>{line}</span>
+                          <button type="button">{locale === 'ar' ? 'افتح' : 'Open'}</button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
+                </div>
+
+                <div className="launcher-stage" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
+                  <div className="preview-zone-label launcher-zone-label">
+                    <span>{locale === 'ar' ? 'أيقونة الذكاء' : 'AI launcher'}</span>
+                    <strong>{locale === 'ar' ? 'أقصى اليمين' : 'Far right'}</strong>
+                  </div>
+                  <button
+                    className={classNames(
+                      'launcher-node',
+                      `launcher-${config.launcher}`,
+                      `launcher-size-${config.appearance.launcherSize}`,
+                      widgetOpen && 'open',
+                    )}
+                    onClick={() => setWidgetOpen((previous) => !previous)}
+                    aria-label={widgetOpen ? (locale === 'ar' ? 'أغلق المساعد' : 'Close assistant') : locale === 'ar' ? 'افتح المساعد' : 'Open assistant'}
+                    aria-pressed={widgetOpen}
+                    type="button"
+                  >
+                    <div className="launcher-preview">{currentIconPreview}</div>
+                    <div className="launcher-copy">
+                      <strong>{locale === 'ar' ? 'اسأل الذكاء' : 'Ask AI'}</strong>
+                      <span>{widgetOpen ? (locale === 'ar' ? 'المساعد مفتوح' : 'Assistant open') : locale === 'ar' ? 'اضغط للفتح' : 'Click to open'}</span>
+                    </div>
+                    <span className="launcher-badge">3</span>
+                  </button>
+                  <span className="launcher-connection-line" aria-hidden="true" />
+                  <p>{locale === 'ar' ? 'غيّر شكل الأيقونة أو زر الفتح من الخيارات، وسترى النتيجة هنا فوراً.' : 'Change the icon or launcher template and see it here instantly.'}</p>
                 </div>
               </div>
               <div className={classNames('api-status-pill', apiHealth?.mode ?? 'error')}>

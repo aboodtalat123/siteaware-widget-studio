@@ -59,7 +59,10 @@ Create a local `.env` file from `.env.example` and add your key:
 ```text
 GEMINI_API_KEY=your_key_here
 GEMINI_MODEL=gemini-3.7-flash
+GEMINI_FALLBACK_MODEL=gemini-2.5-flash
 ```
+
+When the primary model is temporarily overloaded or rate-limited, the server automatically retries with the fallback model.
 
 ## Render
 
