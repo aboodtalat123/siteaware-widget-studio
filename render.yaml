@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: siteaware-widget-studio
+    env: node
+    plan: free
+    buildCommand: npm run build
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.7-flash

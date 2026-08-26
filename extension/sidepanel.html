@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SiteAware Preview</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #07111f;
+        --panel: rgba(10, 19, 34, 0.9);
+        --panel-2: rgba(18, 30, 50, 0.92);
+        --line: rgba(148, 163, 184, 0.16);
+        --text: #edf4ff;
+        --muted: #97a8c7;
+        --accent: #7cc8ff;
+        --accent-2: #8ff0c1;
+        --shadow: 0 24px 72px rgba(0, 0, 0, 0.4);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        background:
+          radial-gradient(circle at top right, rgba(124, 200, 255, 0.15), transparent 28%),
+          radial-gradient(circle at 15% 25%, rgba(143, 240, 193, 0.12), transparent 24%),
+          linear-gradient(180deg, #050b15 0%, var(--bg) 100%);
+        color: var(--text);
+      }
+
+      button,
+      input,
+      textarea,
+      select {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .app {
+        display: grid;
+        gap: 12px;
+        padding: 14px;
+      }
+
+      .hero,
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: linear-gradient(180deg, var(--panel), var(--panel-2));
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .hero {
+        padding: 16px;
+      }
+
+      .hero-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .eyebrow {
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        font-size: 11px;
+        color: var(--accent-2);
+        margin-bottom: 10px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 20px;
+        line-height: 1.15;
+      }
+
+      .hero p,
+      .meta,
+      .small {
+        color: var(--muted);
+        margin: 8px 0 0;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .status-chip {
+        border: 1px solid rgba(124, 200, 255, 0.35);
+        border-radius: 999px;
+        padding: 8px 10px;
+        background: rgba(124, 200, 255, 0.14);
+        color: #dff2ff;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .toolbar,
+      .row,
+      .preview-actions,
+      .profile-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .toolbar {
+        margin-top: 14px;
+      }
+
+      .pill,
+      .ghost,
+      .primary {
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        padding: 8px 11px;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .primary {
+        border-color: rgba(124, 200, 255, 0.4);
+        background: linear-gradient(135deg, rgba(124, 200, 255, 0.24), rgba(143, 240, 193, 0.18));
+      }
+
+      .ghost {
+        color: var(--muted);
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+
+      .panel-head strong {
+        font-size: 14px;
+      }
+
+      .section-body {
+        padding: 14px;
+      }
+
+      .summary-grid,
+      .profile-grid,
+      .recs-grid {
+        display: grid;
+        gap: 10px;
+      }
+
+      .summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .summary-card,
+      .profile-card,
+      .rec-card {
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, 0.14);
+        background: rgba(6, 12, 22, 0.55);
+        padding: 12px;
+      }
+
+      .summary-card strong,
+      .profile-card strong,
+      .rec-card strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 13px;
+      }
+
+      .summary-card span,
+      .profile-card span,
+      .rec-card span {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.4;
+      }
+
+      .profile-grid {
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      }
+
+      .profile-card {
+        text-align: left;
+      }
+
+      .profile-card .preview-actions {
+        margin-top: 10px;
+      }
+
+      .rec-card {
+        display: grid;
+        gap: 10px;
+      }
+
+      .swatches {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .swatches span {
+        display: block;
+        height: 16px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+      }
+
+      pre {
+        margin: 0;
+        padding: 12px;
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, 0.14);
+        background: rgba(4, 9, 17, 0.8);
+        color: #d8e4fb;
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 260px;
+        overflow: auto;
+        font-size: 11px;
+        line-height: 1.5;
+      }
+
+      .empty {
+        margin: 0;
+        padding: 12px 0 2px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .status-line {
+        color: var(--accent-2);
+      }
+
+      @media (max-width: 460px) {
+        .summary-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <section class="hero">
+        <div class="hero-top">
+          <div>
+            <div class="eyebrow">SiteAware Preview</div>
+            <h1>Live page scanner and widget launcher</h1>
+            <p id="tabMeta">No active tab yet.</p>
+          </div>
+          <div class="status-chip" id="status">Ready.</div>
+        </div>
+        <div class="toolbar">
+          <button id="scanBtn" class="primary">Scan This Page</button>
+          <button id="brandBtn" class="pill">Brand Match</button>
+          <button id="contrastBtn" class="pill">High Contrast</button>
+          <button id="premiumBtn" class="pill">Premium</button>
+          <button id="injectBtn" class="pill">Inject Widget</button>
+          <button id="removeBtn" class="ghost">Remove Widget</button>
+          <button id="pickBtn" class="pill">Pick Target</button>
+          <button id="clearBtn" class="ghost">Clear Target</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-body">
+          <div class="panel-head">
+            <strong>Detected Page</strong>
+            <span class="small" id="summaryHint">Run a scan or choose a demo profile.</span>
+          </div>
+          <div id="summary" class="summary-grid"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-body">
+          <div class="panel-head">
+            <strong>Demo Profiles</strong>
+            <span class="small">Deterministic local samples</span>
+          </div>
+          <div id="profiles" class="profile-grid"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-body">
+          <div class="panel-head">
+            <strong>Recommendations</strong>
+            <span class="small" id="recsHint">No recommendations yet.</span>
+          </div>
+          <div id="recs" class="recs-grid"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-body">
+          <div class="panel-head">
+            <strong>Selected Target</strong>
+            <span class="small status-line">Picker output</span>
+          </div>
+          <pre id="target">No target selected.</pre>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-body">
+          <div class="panel-head">
+            <strong>Raw Snapshot</strong>
+            <span class="small">Stable JSON for debugging</span>
+          </div>
+          <pre id="snapshot">{}</pre>
+        </div>
+      </section>
+    </div>
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>

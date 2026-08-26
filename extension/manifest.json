@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "SiteAware Preview",
+  "version": "0.1.0",
+  "description": "Preview, scan, and spotlight SiteAware on live websites.",
+  "action": {
+    "default_title": "SiteAware Preview"
+  },
+  "permissions": ["activeTab", "scripting", "storage", "tabs", "sidePanel"],
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["shared/*.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
