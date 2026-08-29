@@ -23,7 +23,10 @@ import {
 } from './studioData';
 import {
   applyPrimaryOverride,
+  analyzeWebsiteStyle,
   autoThemeStorageKey,
+  generateThemeRecommendations,
+  type WebsiteStyleSnapshot,
   type GeneratedThemeRecommendation,
 } from './themeIntelligence';
 
@@ -81,6 +84,17 @@ const themeModeKey = 'siteaware-widget-studio-theme-mode-v1';
 
 const defaultPreset = presetDefinitions.find((preset) => preset.id === 'siteaware-default') ?? presetDefinitions[0]!;
 const defaultConfig: StudioConfig = defaultPreset.config;
+const defaultStyleInput = `:root {
+  --primary: #2563eb;
+  --background: #ffffff;
+  --surface: #f6f8fd;
+  --text: #111827;
+  --radius: 18px;
+}
+
+body {
+  font-family: "Inter", sans-serif;
+}`;
 
 const previewSites = [
   {
@@ -291,28 +305,59 @@ function storeSavedPresets(presets: SavedPreset[]) {
   localStorage.setItem(savedPresetsKey, JSON.stringify(presets, null, 2));
 }
 
-function safeImportConfig(raw: unknown): StudioConfig | null {
-  if (!raw || typeof raw !== 'object') {
-    return null;
-  }
-  const parsed = raw as Partial<StudioConfig>;
-  const appearance = parsed.appearance ?? {};
-  return {
-    ...defaultConfig,
-    ...parsed,
-    appearance: {
-      ...defaultConfig.appearance,
-      ...appearance,
-    },
-  };
-}
-
 function classNames(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(' ');
 }
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function extractStyleSnapshot(input: string, locale: UILocale): WebsiteStyleSnapshot {
+  const hexMatches = [...input.matchAll(/#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\b/g)].map((match) => match[0]);
+  const uniqueColors = Array.from(new Set(hexMatches));
+  const fontMatch = input.match(/font-family\s*:\s*([^;]+);?/i);
+  const fontFamilies = fontMatch
+    ? (fontMatch[1] ?? '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean)
+    : ['"Space Grotesk"', '"Inter"', 'system-ui'];
+  const radiusMatch = input.match(/(?:border-radius|radius)\s*[:=]\s*(\d+(?:\.\d+)?)px/i);
+  const radiusValue = radiusMatch ? Number(radiusMatch[1]) : 18;
+  const darkHint = /#0[0-9a-f]{2,}|#1[0-9a-f]{2,}|#2[0-9a-f]{2,}|dark|black|#111|#222/i.test(input);
+  const lightHint = /white|light|#fff|#f[0-9a-f]{2,}/i.test(input);
+  const pageMode = darkHint && !lightHint ? 'dark' : !darkHint && lightHint ? 'light' : 'mixed';
+  const brand = uniqueColors[0] ?? '#2563eb';
+  const background = uniqueColors[1] ?? (pageMode === 'dark' ? '#0f172a' : '#ffffff');
+  const surface = uniqueColors[2] ?? (pageMode === 'dark' ? '#111827' : '#f6f8fd');
+  const text = uniqueColors[3] ?? (pageMode === 'dark' ? '#f8fafc' : '#111827');
+  const muted = uniqueColors[4] ?? (pageMode === 'dark' ? '#94a3b8' : '#6b7280');
+  const border = uniqueColors[5] ?? (pageMode === 'dark' ? '#334155' : '#dbe4f0');
+  const accent = uniqueColors[6] ?? brand;
+
+  return {
+    pageMode,
+    pageBackground: background,
+    surfaceColors: [surface, background],
+    textColors: [text],
+    mutedTextColors: [muted],
+    borderColors: [border],
+    brandColors: [brand],
+    accentColors: [accent],
+    linkColors: [brand],
+    buttonColors: [brand, accent],
+    fontFamilies,
+    headingWeight: 700,
+    bodyWeight: 400,
+    buttonRadius: radiusValue,
+    cardRadius: radiusValue,
+    inputRadius: radiusValue,
+    source: {
+      hostname: locale === 'ar' ? 'style.input' : 'style.input',
+      title: locale === 'ar' ? 'تحليل ستايل الموقع' : 'Website style input',
+    },
+  };
 }
 
 function getCollection(category: StudioCategory): VariantItem[] {
@@ -372,13 +417,14 @@ function App() {
   const [activeAutoTheme, setActiveAutoTheme] = useState<GeneratedThemeRecommendation | null>(loadAutoTheme);
   const [namedPreset, setNamedPreset] = useState('My preset');
   const [savedPresets, setSavedPresets] = useState<SavedPreset[]>(loadSavedPresets);
-  const [importConfigText, setImportConfigText] = useState(() => JSON.stringify(loadConfig(), null, 2));
   const [designPrompt, setDesignPrompt] = useState(() =>
     'Make the launcher compact on the far right and the assistant a wider left dock with a clean white theme.',
   );
   const [designStatus, setDesignStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [designSummary, setDesignSummary] = useState('');
   const [designReasoning, setDesignReasoning] = useState<string[]>([]);
+  const [styleInput, setStyleInput] = useState(defaultStyleInput);
+  const [styleAnalysis, setStyleAnalysis] = useState('');
 
   useEffect(() => {
     storeConfig(config);
@@ -486,8 +532,6 @@ function App() {
       return haystack.includes(query);
     });
   }, [search, selectedCategory]);
-
-  const configJson = useMemo(() => JSON.stringify(config, null, 2), [config]);
 
   const visibleCounts = {
     assistantIcon: assistantIcons.length,
@@ -696,24 +740,6 @@ function App() {
     URL.revokeObjectURL(url);
   }
 
-  async function copyConfigJson() {
-    await navigator.clipboard.writeText(configJson);
-  }
-
-  function importConfigJson() {
-    try {
-      const parsed = JSON.parse(importConfigText);
-      const imported = safeImportConfig(parsed);
-      if (!imported) {
-        return;
-      }
-      setConfig(imported);
-      setActiveAutoTheme(null);
-    } catch {
-      // Keep the current config if JSON parsing fails.
-    }
-  }
-
   function appendAssistantReply(reply: ConversationMessage) {
     setConversation((previous) => [...previous, reply]);
   }
@@ -850,6 +876,35 @@ function App() {
     setWidgetOpen(true);
   }
 
+  function analyzeStyleInput() {
+    const snapshot = extractStyleSnapshot(styleInput, locale);
+    const analysis = analyzeWebsiteStyle(snapshot);
+    const recommendation = generateThemeRecommendations(snapshot)[0];
+
+    if (!recommendation) {
+      return;
+    }
+
+    setStyleAnalysis(
+      locale === 'ar'
+        ? `تم فهم الستايل: ${analysis.inferredPageMode}، اللون الأساسي ${analysis.inferredPrimary}، والانحناء ${analysis.inferredRadius}.`
+        : `Style detected: ${analysis.inferredPageMode}, primary ${analysis.inferredPrimary}, radius ${analysis.inferredRadius}.`,
+    );
+    setSelectedCategory('theme');
+    setActiveAutoTheme(recommendation);
+    setConfig((previous) => ({
+      ...previous,
+      theme: recommendation.themeId,
+      themeOrigin: recommendation.origin,
+      appearance: {
+        ...previous.appearance,
+        ...recommendation.appearance,
+        primaryColor: recommendation.appearance.primaryColor,
+      },
+    }));
+    setThemeMode(snapshot.pageMode === 'dark' ? 'dark' : 'light');
+  }
+
   async function runDesignCopilot() {
     if (!designPrompt.trim()) {
       return;
@@ -954,14 +1009,24 @@ function App() {
       style={{ ...themeStyle, ...modeStyle }}
     >
       <header className="hero">
-        <div>
+        <div className="hero-copy">
           <div className="eyebrow">{locale === 'ar' ? 'استوديو SiteAware' : 'SiteAware Widget Studio'}</div>
-          <h1>{locale === 'ar' ? 'صمّم. عاين. اختبر.' : 'Design. Preview. Test.'}</h1>
+          <div className="hero-title-row">
+            <h1>{locale === 'ar' ? 'صمّم. عاين. اختبر.' : 'Design. Preview. Test.'}</h1>
+            <div className={classNames('api-status-pill', 'hero-status', apiHealth?.mode ?? 'error')}>
+              <strong>{apiStatusLabel}</strong>
+              <span>{locale === 'ar' ? 'Gemini من الخلفية' : 'Server-side Gemini'}</span>
+            </div>
+          </div>
           <p>
             {locale === 'ar'
-              ? 'ابنِ شكل المساعد يدويًا أو اطلب من Gemini يعيد ترتيب الأيقونة والمحادثة والثيم فورًا داخل نفس المعاينة.'
-              : 'Build the assistant manually or ask Gemini to restyle the launcher, chat shell, and layout live inside the same preview.'}
+              ? 'اختَر شكل الأيقونة والمحادثة أو دع Gemini يرتبهم مباشرة على المعاينة.'
+              : 'Pick the launcher and chat style, or let Gemini restyle them live in the preview.'}
           </p>
+          <div className="hero-meta">
+            <span>{locale === 'ar' ? 'الأيقونة داخل الموقع مباشرة' : 'Launcher appears inside the site preview'}</span>
+            <span>{locale === 'ar' ? 'المساعد ثابت على أقصى اليسار' : 'Assistant stays docked on the far left'}</span>
+          </div>
         </div>
         <div className="hero-actions">
           <button className={classNames('secondary-button', locale === 'ar' && 'active')} onClick={() => setLocale('ar')}>
@@ -1125,18 +1190,48 @@ function App() {
             <>
               <section className="panel-section sticky">
                 <div className="panel-heading">
-                  <h2>{locale === 'ar' ? 'الإعدادات' : 'Presets'}</h2>
-                  <span>{locale === 'ar' ? 'تركيبات جاهزة' : 'Curated combinations'}</span>
+                  <h2>{locale === 'ar' ? '1. ستايل الموقع' : '1. Site Style'}</h2>
+                  <span>{locale === 'ar' ? 'الصق CSS أو ألوان الموقع' : 'Paste CSS or brand styles'}</span>
                 </div>
-                <div className="preset-grid">
-                  {presetDefinitions.map((preset) => (
+                <textarea
+                  className="style-intake"
+                  rows={8}
+                  value={styleInput}
+                  onChange={(event) => setStyleInput(event.target.value)}
+                  placeholder={locale === 'ar' ? 'الصق هنا CSS أو ألوان الموقع أو font-family أو border-radius...' : 'Paste CSS, colors, font-family, border-radius, or style notes here...'}
+                />
+                <div className="auto-actions">
+                  <button className="primary-button" onClick={analyzeStyleInput} type="button">
+                    {locale === 'ar' ? 'حلّل وطبّق' : 'Analyze & Apply'}
+                  </button>
+                  <button className="secondary-button" onClick={() => applyPreset('siteaware-default')} type="button">
+                    {locale === 'ar' ? 'إرجاع الافتراضي' : 'Reset Default'}
+                  </button>
+                </div>
+                <p className="style-intake-note">
+                  {styleAnalysis ||
+                    (locale === 'ar'
+                      ? 'هذه أول خطوة: ضع ستايل الموقع هنا، وسأطلع الألوان والانحناءات وأطبقها على المعاينة.'
+                      : 'Start here by pasting the site style. The studio will infer colors and shape cues and apply them to the preview.')}
+                </p>
+              </section>
+
+              <section className="panel-section">
+                <div className="panel-heading">
+                  <h2>{locale === 'ar' ? '2. أيقونات الذكاء' : '2. AI Icons'}</h2>
+                  <span>{locale === 'ar' ? 'اختر الشكل وسيظهر فورًا' : 'Pick one and see it instantly'}</span>
+                </div>
+                <div className="variant-grid assistantIcon-gallery">
+                  {assistantIcons.map((item) => (
                     <button
-                      key={preset.id}
-                      className={classNames('preset-card', config.theme === preset.config.theme && config.launcher === preset.config.launcher && 'active')}
-                      onClick={() => applyPreset(preset.id)}
+                      key={item.id}
+                      className={classNames('variant-card', config.assistantIcon === item.id && 'active')}
+                      onClick={() => updateConfig('assistantIcon', item.id)}
+                      title={item.note}
                     >
-                      <strong>{preset.label}</strong>
-                      <span>{preset.note}</span>
+                      <div className="variant-preview">{item.preview}</div>
+                      <strong>{item.label}</strong>
+                      <span>{item.note}</span>
                     </button>
                   ))}
                 </div>
@@ -1144,39 +1239,18 @@ function App() {
 
               <section className="panel-section">
                 <div className="panel-heading">
-                  <h2>{locale === 'ar' ? 'اختيار الشكل' : 'Shape picker'}</h2>
-                  <span>{locale === 'ar' ? 'الأيقونة + المحادثة' : 'Icon + chat shell'}</span>
+                  <h2>{locale === 'ar' ? '3. تمبليت المحادثة' : '3. Chat Templates'}</h2>
+                  <span>{locale === 'ar' ? 'شكل الشات والزر معًا' : 'Chat shell + launcher feel'}</span>
                 </div>
                 <div className="design-focus-grid">
-                  <button className={classNames('design-focus-card', selectedCategory === 'assistantIcon' && 'active')} onClick={() => setSelectedCategory('assistantIcon')}>
-                    <strong>{locale === 'ar' ? 'أيقونة المساعد' : 'Assistant icon'}</strong>
-                    <span>{assistantIcons.find((item) => item.id === config.assistantIcon)?.label ?? (locale === 'ar' ? 'اختر شكل الأيقونة' : 'Pick the icon shape')}</span>
-                  </button>
-                  <button className={classNames('design-focus-card', selectedCategory === 'chatShell' && 'active')} onClick={() => setSelectedCategory('chatShell')}>
-                    <strong>{locale === 'ar' ? 'شكل المحادثة' : 'Chat shell'}</strong>
-                    <span>{chatShellVariants.find((item) => item.id === config.chatShell)?.label ?? (locale === 'ar' ? 'اختر واجهة المحادثة' : 'Pick the chat window style')}</span>
-                  </button>
-                  <button className={classNames('design-focus-card', selectedCategory === 'launcher' && 'active')} onClick={() => setSelectedCategory('launcher')}>
-                    <strong>{locale === 'ar' ? 'زر الفتح' : 'Launcher'}</strong>
-                    <span>{launcherVariants.find((item) => item.id === config.launcher)?.label ?? (locale === 'ar' ? 'شكل الزر الصغير' : 'Pick the trigger button')}</span>
-                  </button>
-                </div>
-              </section>
-
-              <section className="panel-section sticky">
-                <div className="panel-heading">
-                  <h2>{locale === 'ar' ? 'الفئات' : 'Categories'}</h2>
-                  <span>{categories.length} {locale === 'ar' ? 'مجموعة' : 'groups'}</span>
-                </div>
-                <div className="category-list">
-                  {categories.map((category) => (
+                  {chatShellVariants.map((item) => (
                     <button
-                      key={category.id}
-                      className={classNames('category-pill', selectedCategory === category.id && 'active')}
-                      onClick={() => setSelectedCategory(category.id)}
+                      key={item.id}
+                      className={classNames('design-focus-card', config.chatShell === item.id && 'active')}
+                      onClick={() => updateConfig('chatShell', item.id)}
                     >
-                      <strong>{category.label}</strong>
-                      <span>{category.note}</span>
+                      <strong>{item.label}</strong>
+                      <span>{item.note}</span>
                     </button>
                   ))}
                 </div>
@@ -1184,22 +1258,49 @@ function App() {
 
               <section className="panel-section">
                 <div className="panel-heading">
-                  <h2>{locale === 'ar' ? 'بحث' : 'Search'}</h2>
-                  <span>{locale === 'ar' ? 'صفِّ المعرض الحالي' : 'Filter the active gallery'}</span>
+                  <h2>{locale === 'ar' ? '4. أشهر الألوان' : '4. Popular Colors'}</h2>
+                  <span>{locale === 'ar' ? 'اختيار سريع للهوية' : 'Quick visual direction'}</span>
+                </div>
+                <div className="theme-grid">
+                  {themePalettes.map((theme) => (
+                    <button
+                      key={theme.id}
+                      className={classNames('theme-card', config.theme === theme.id && 'active')}
+                      onClick={() => updateConfig('theme', theme.id)}
+                      title={theme.note}
+                    >
+                      <strong>{theme.label}</strong>
+                      <span>{theme.note}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="panel-section">
+                <div className="panel-heading">
+                  <h2>{locale === 'ar' ? '5. أشياء إضافية' : '5. More Options'}</h2>
+                  <span>{locale === 'ar' ? 'زر الفتح والرسائل والإرسال' : 'Launcher, messages, input, more'}</span>
+                </div>
+                <div className="category-list">
+                  {categories
+                    .filter((category) => !['assistantIcon', 'chatShell', 'theme'].includes(category.id))
+                    .map((category) => (
+                      <button
+                        key={category.id}
+                        className={classNames('category-pill', selectedCategory === category.id && 'active')}
+                        onClick={() => setSelectedCategory(category.id)}
+                      >
+                        <strong>{category.label}</strong>
+                        <span>{category.note}</span>
+                      </button>
+                    ))}
                 </div>
                 <input
                   className="search-input"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder={locale === 'ar' ? 'ابحث في الأسماء أو الوصف أو الكلمات المفتاحية' : 'Search labels, notes, or keywords'}
+                  placeholder={locale === 'ar' ? 'ابحث داخل الخيارات الإضافية' : 'Search the extra options'}
                 />
-              </section>
-
-              <section className="panel-section">
-                <div className="panel-heading">
-                  <h2>{currentCategory.label}</h2>
-                  <span>{activeCategoryItems.length} {locale === 'ar' ? 'ظاهر' : 'visible'}</span>
-                </div>
                 <div className={classNames('variant-grid', `${selectedCategory}-gallery`)}>
                   {activeCategoryItems.map((item) => {
                     const selectedValue = config[selectedCategory as keyof StudioConfig];
@@ -1444,10 +1545,6 @@ function App() {
                   </div>
                 </div>
               </div>
-              <div className={classNames('api-status-pill', apiHealth?.mode ?? 'error')}>
-                <strong>{apiStatusLabel}</strong>
-                <span>{locale === 'ar' ? 'استخدم Gemini الحقيقي من الخلفية' : 'Use the live Gemini backend'}</span>
-              </div>
             </div>
           </div>
         </section>
@@ -1455,8 +1552,8 @@ function App() {
         <aside className="panel right-rail">
           <section className="panel-section sticky">
             <div className="panel-heading">
-              <h2>{locale === 'ar' ? 'التحكم العام' : 'Global Controls'}</h2>
-              <span>{locale === 'ar' ? 'الألوان + الترتيب' : 'Design tokens + layout'}</span>
+              <h2>{locale === 'ar' ? 'تحكم سريع' : 'Quick Controls'}</h2>
+              <span>{locale === 'ar' ? 'المقاسات والألوان' : 'Size and colors'}</span>
             </div>
             <div className="demo-kit">
               <div>
@@ -1575,23 +1672,6 @@ function App() {
 
           <section className="panel-section">
             <div className="panel-heading">
-              <h2>{locale === 'ar' ? 'عقد الإعدادات' : 'Config Contract'}</h2>
-              <span>{locale === 'ar' ? 'JSON قابل للتصدير' : 'Serializable JSON'}</span>
-            </div>
-            <textarea className="auto-json" rows={10} value={importConfigText} onChange={(event) => setImportConfigText(event.target.value)} />
-            <div className="auto-actions">
-                      <button className="secondary-button" onClick={copyConfigJson}>
-                {locale === 'ar' ? 'نسخ JSON' : 'Copy Config JSON'}
-              </button>
-              <button className="secondary-button" onClick={importConfigJson}>
-                {locale === 'ar' ? 'استيراد JSON' : 'Import Config JSON'}
-              </button>
-            </div>
-            <pre className="code-block">{configJson}</pre>
-          </section>
-
-          <section className="panel-section">
-            <div className="panel-heading">
               <h2>{locale === 'ar' ? 'إعدادات محفوظة' : 'Named Presets'}</h2>
               <span>{savedPresets.length} {locale === 'ar' ? 'محفوظ' : 'saved'}</span>
             </div>
@@ -1640,25 +1720,6 @@ function App() {
             </div>
           </section>
 
-          <section className="panel-section">
-            <div className="panel-heading">
-              <h2>{locale === 'ar' ? 'مكتبة الألوان' : 'Palette Library'}</h2>
-              <span>{themePalettes.length} {locale === 'ar' ? 'ثيم' : 'themes'}</span>
-            </div>
-            <div className="theme-grid">
-              {themePalettes.map((theme) => (
-                <button
-                  key={theme.id}
-                  className={classNames('theme-card', config.theme === theme.id && 'active')}
-                  onClick={() => updateConfig('theme', theme.id)}
-                  title={theme.note}
-                >
-                  <strong>{theme.label}</strong>
-                  <span>{theme.note}</span>
-                </button>
-              ))}
-            </div>
-          </section>
         </aside>
       </main>
     </div>
