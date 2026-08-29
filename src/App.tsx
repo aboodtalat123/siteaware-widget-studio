@@ -1191,7 +1191,7 @@ function App() {
         </div>
       </section>
 
-      <main className={classNames('studio-grid', (mode === 'preview' || mode === 'test') && 'preview-focused')}>
+      <main className="studio-grid">
         <aside className="panel left-rail">
           {mode === 'auto-match' ? (
             <AutoMatchPanel onApplyTheme={applyGeneratedTheme} currentPrimaryColor={config.appearance.primaryColor} />
