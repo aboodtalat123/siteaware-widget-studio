@@ -406,7 +406,7 @@ function App() {
     const stored = localStorage.getItem(themeModeKey);
     return stored === 'dark' ? 'dark' : 'light';
   });
-  const [selectedCategory, setSelectedCategory] = useState<StudioCategory>('assistantIcon');
+  const [selectedCategory, setSelectedCategory] = useState<StudioCategory>('launcher');
   const [search, setSearch] = useState('');
   const [conversation, setConversation] = useState<ConversationMessage[]>(() => buildInitialConversation('en'));
   const [composer, setComposer] = useState('Where can I change my API key?');
@@ -425,6 +425,8 @@ function App() {
   const [designReasoning, setDesignReasoning] = useState<string[]>([]);
   const [styleInput, setStyleInput] = useState(defaultStyleInput);
   const [styleAnalysis, setStyleAnalysis] = useState('');
+  const [styleStatus, setStyleStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [styleReasoning, setStyleReasoning] = useState<string[]>([]);
 
   useEffect(() => {
     storeConfig(config);
@@ -507,7 +509,9 @@ function App() {
   const currentSourceLabel =
     sourceCitationVariants.find((item) => item.id === config.sourceCitation)?.label ?? (locale === 'ar' ? 'المصادر' : 'Sources');
   const currentCtaLabel = takeMeThereVariants.find((item) => item.id === config.takeMeThere)?.label ?? (locale === 'ar' ? 'خذني لهناك' : 'Take me there');
-  const currentCategory = categories.find((entry) => entry.id === selectedCategory) ?? categories[0]!;
+  const extraCategory: StudioCategory = ['assistantIcon', 'chatShell', 'theme'].includes(selectedCategory)
+    ? 'launcher'
+    : selectedCategory;
   const currentSite = locale === 'ar'
     ? {
         name: selectedSite.name.ar,
@@ -522,7 +526,7 @@ function App() {
         lines: selectedSite.lines.en,
       };
   const activeCategoryItems = useMemo(() => {
-    const items = getCollection(selectedCategory);
+    const items = getCollection(extraCategory);
     const query = search.trim().toLowerCase();
     if (!query) {
       return items;
@@ -531,7 +535,7 @@ function App() {
       const haystack = [item.id, item.label, item.note, ...(item.keywords ?? [])].join(' ').toLowerCase();
       return haystack.includes(query);
     });
-  }, [search, selectedCategory]);
+  }, [search, extraCategory]);
 
   const visibleCounts = {
     assistantIcon: assistantIcons.length,
@@ -608,6 +612,61 @@ function App() {
     setConfig(preset.config);
     setActiveAutoTheme(null);
     setWidgetOpen(true);
+  }
+
+  function applyCopilotTemplate() {
+    setConfig((previous) => ({
+      ...previous,
+      assistantIcon: 'spark-02',
+      launcher: 'circle-icon',
+      chatShell: 'side-panel',
+      assistantMessage: 'modern-saas',
+      userMessage: 'bubble-rounded',
+      inputBar: 'floating-input',
+      sendButton: 'send-circle',
+      header: 'header-docked',
+      sourceCitation: 'source-chips',
+      takeMeThere: 'cta-primary',
+      theme: 'neutral-light',
+      themeOrigin: 'manual',
+      appearance: {
+        ...previous.appearance,
+        radius: 'md',
+        widgetWidth: 420,
+        widgetHeight: 720,
+        density: 'comfortable',
+        shadowStrength: 0.72,
+        launcherSize: 'md',
+        launcherPosition: 'bottom-right',
+        primaryColor: '#111111',
+      },
+    }));
+    setActiveAutoTheme(null);
+    setThemeMode('light');
+    setViewMode('desktop');
+    setWidgetOpen(true);
+    setMode('preview');
+  }
+
+  function buildDesignCatalog() {
+    return {
+      assistantIcon: assistantIcons.map(({ id, label, note }) => ({ id, label, note })),
+      launcher: launcherVariants.map(({ id, label, note }) => ({ id, label, note })),
+      chatShell: chatShellVariants.map(({ id, label, note }) => ({ id, label, note })),
+      header: headerVariants.map(({ id, label, note }) => ({ id, label, note })),
+      assistantMessage: assistantMessages.map(({ id, label, note }) => ({ id, label, note })),
+      userMessage: userMessages.map(({ id, label, note }) => ({ id, label, note })),
+      inputBar: inputBars.map(({ id, label, note }) => ({ id, label, note })),
+      sendButton: sendButtons.map(({ id, label, note }) => ({ id, label, note })),
+      sourceCitation: sourceCitationVariants.map(({ id, label, note }) => ({ id, label, note })),
+      takeMeThere: takeMeThereVariants.map(({ id, label, note }) => ({ id, label, note })),
+      theme: themePalettes.map(({ id, label, note }) => ({ id, label, note })),
+      radius: ['sm', 'md', 'lg', 'xl'],
+      density: ['compact', 'comfortable', 'spacious'],
+      launcherSize: ['sm', 'md', 'lg'],
+      launcherPosition: ['bottom-right', 'bottom-left', 'left-edge', 'right-edge'],
+      focusCategory: categories.map(({ id, label }) => ({ id, label })),
+    };
   }
 
   function normalizeDesignPatch(patch: DesignPatch | undefined): DesignPatch {
@@ -720,7 +779,7 @@ function App() {
   function resetStudio() {
     setConfig(defaultConfig);
     setActiveAutoTheme(null);
-    setSelectedCategory('assistantIcon');
+    setSelectedCategory('launcher');
     setSearch('');
     setMode('build');
     setViewMode('desktop');
@@ -876,7 +935,13 @@ function App() {
     setWidgetOpen(true);
   }
 
-  function analyzeStyleInput() {
+  async function analyzeStyleInput() {
+    if (!styleInput.trim()) {
+      setStyleStatus('error');
+      setStyleAnalysis(locale === 'ar' ? 'الصق CSS أو ألوان الموقع أولاً.' : 'Paste the website CSS or brand colors first.');
+      return;
+    }
+
     const snapshot = extractStyleSnapshot(styleInput, locale);
     const analysis = analyzeWebsiteStyle(snapshot);
     const recommendation = generateThemeRecommendations(snapshot)[0];
@@ -885,12 +950,15 @@ function App() {
       return;
     }
 
-    setStyleAnalysis(
+    const localSummary =
       locale === 'ar'
-        ? `تم فهم الستايل: ${analysis.inferredPageMode}، اللون الأساسي ${analysis.inferredPrimary}، والانحناء ${analysis.inferredRadius}.`
-        : `Style detected: ${analysis.inferredPageMode}, primary ${analysis.inferredPrimary}, radius ${analysis.inferredRadius}.`,
-    );
-    setSelectedCategory('theme');
+        ? `فهمت الستايل محلياً: ${analysis.inferredPageMode}، اللون الأساسي ${analysis.inferredPrimary}، والانحناء ${analysis.inferredRadius}.`
+        : `Local style match: ${analysis.inferredPageMode}, primary ${analysis.inferredPrimary}, radius ${analysis.inferredRadius}.`;
+
+    setStyleStatus(apiHealth?.mode === 'ready' ? 'loading' : 'idle');
+    setStyleAnalysis(localSummary);
+    setStyleReasoning(analysis.contrastNotes.slice(0, 3));
+    setSelectedCategory('launcher');
     setActiveAutoTheme(recommendation);
     setConfig((previous) => ({
       ...previous,
@@ -903,6 +971,54 @@ function App() {
       },
     }));
     setThemeMode(snapshot.pageMode === 'dark' ? 'dark' : 'light');
+    setWidgetOpen(true);
+
+    if (apiHealth?.mode !== 'ready') {
+      setStyleAnalysis(
+        locale === 'ar'
+          ? `${localSummary} تم تطبيق الاقتراح الآمن، وGemini غير متصل حالياً لإضافة رأيه.`
+          : `${localSummary} The safe match is applied; Gemini is not connected for a second opinion.`,
+      );
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/design', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          locale,
+          prompt:
+            locale === 'ar'
+              ? `حلّل CSS التالي واختر من الكتالوج شكل أيقونة وlauncher وتمبليت محادثة يناسب الموقع. حافظ على المساعد كلوحة جانبية يسار تضغط الصفحة، واشرح باختصار لماذا الاختيار مناسب. CSS:\n${styleInput.slice(0, 12000)}`
+              : `Analyze this CSS and choose a matching icon, launcher, and chat template from the catalog. Keep the assistant as a left dock that pushes the page, and briefly explain why it fits. CSS:\n${styleInput.slice(0, 12000)}`,
+          site: currentSite,
+          config,
+          themeMode: snapshot.pageMode === 'dark' ? 'dark' : 'light',
+          catalog: buildDesignCatalog(),
+        }),
+      });
+      const data = (await response.json()) as DesignResponse;
+      if (!response.ok) {
+        throw new Error(data.message || `Request failed with ${response.status}`);
+      }
+
+      applyDesignPatch(data.patch ?? {});
+      setActiveAutoTheme(recommendation);
+      setStyleAnalysis(data.summary ? `${localSummary} ${data.summary}` : localSummary);
+      setStyleReasoning(Array.isArray(data.reasoning) ? data.reasoning.slice(0, 4) : analysis.contrastNotes.slice(0, 3));
+      setStyleStatus('idle');
+    } catch (error) {
+      setStyleStatus('error');
+      setStyleAnalysis(
+        `${localSummary} ${
+          locale === 'ar'
+            ? 'تم تطبيق المطابقة المحلية، لكن تعذر أخذ اقتراح Gemini الآن.'
+            : 'The local match is applied, but Gemini could not add a recommendation right now.'
+        }`,
+      );
+      setStyleReasoning(error instanceof Error ? [error.message] : analysis.contrastNotes.slice(0, 3));
+    }
   }
 
   async function runDesignCopilot() {
@@ -914,25 +1030,6 @@ function App() {
     setDesignStatus('loading');
     setDesignSummary('');
     setDesignReasoning([]);
-
-    const catalog = {
-      assistantIcon: assistantIcons.map(({ id, label, note }) => ({ id, label, note })),
-      launcher: launcherVariants.map(({ id, label, note }) => ({ id, label, note })),
-      chatShell: chatShellVariants.map(({ id, label, note }) => ({ id, label, note })),
-      header: headerVariants.map(({ id, label, note }) => ({ id, label, note })),
-      assistantMessage: assistantMessages.map(({ id, label, note }) => ({ id, label, note })),
-      userMessage: userMessages.map(({ id, label, note }) => ({ id, label, note })),
-      inputBar: inputBars.map(({ id, label, note }) => ({ id, label, note })),
-      sendButton: sendButtons.map(({ id, label, note }) => ({ id, label, note })),
-      sourceCitation: sourceCitationVariants.map(({ id, label, note }) => ({ id, label, note })),
-      takeMeThere: takeMeThereVariants.map(({ id, label, note }) => ({ id, label, note })),
-      theme: themePalettes.map(({ id, label, note }) => ({ id, label, note })),
-      radius: ['sm', 'md', 'lg', 'xl'],
-      density: ['compact', 'comfortable', 'spacious'],
-      launcherSize: ['sm', 'md', 'lg'],
-      launcherPosition: ['bottom-right', 'bottom-left', 'left-edge', 'right-edge'],
-      focusCategory: categories.map(({ id, label }) => ({ id, label })),
-    };
 
     try {
       const response = await fetch('/api/design', {
@@ -946,7 +1043,7 @@ function App() {
           site: currentSite,
           config,
           themeMode,
-          catalog,
+          catalog: buildDesignCatalog(),
         }),
       });
 
@@ -1000,9 +1097,10 @@ function App() {
         `radius-${config.appearance.radius}`,
         `density-${config.appearance.density}`,
         `launcher-${config.appearance.launcherPosition}`,
-      `launcher-size-${config.appearance.launcherSize}`,
-      `view-${viewMode}`,
-      `theme-${activeTheme.id}`,
+        `launcher-size-${config.appearance.launcherSize}`,
+        `view-${viewMode}`,
+        `theme-${activeTheme.id}`,
+        `mode-${mode}`,
       )}
       dir={locale === 'ar' ? 'rtl' : 'ltr'}
       lang={locale}
@@ -1056,7 +1154,17 @@ function App() {
       <section className="mode-strip panel">
         <div className="mode-buttons">
           {(['build', 'design', 'preview', 'test', 'auto-match'] as const).map((item) => (
-            <button key={item} className={classNames('mode-pill', mode === item && 'active')} onClick={() => setMode(item)}>
+            <button
+              key={item}
+              className={classNames('mode-pill', mode === item && 'active')}
+              onClick={() => {
+                setMode(item);
+                if (item === 'preview' || item === 'test') {
+                  setViewMode('desktop');
+                  setWidgetOpen(true);
+                }
+              }}
+            >
               {item === 'build'
                 ? locale === 'ar'
                   ? 'البناء'
@@ -1067,8 +1175,8 @@ function App() {
                     : 'AI Designer'
                 : item === 'preview'
                   ? locale === 'ar'
-                    ? 'معاينة'
-                    : 'Preview'
+                    ? 'معاينة لابتوب'
+                    : 'Laptop Preview'
                   : item === 'test'
                     ? locale === 'ar'
                       ? 'تجربة'
@@ -1083,7 +1191,7 @@ function App() {
         </div>
       </section>
 
-      <main className="studio-grid">
+      <main className={classNames('studio-grid', (mode === 'preview' || mode === 'test') && 'preview-focused')}>
         <aside className="panel left-rail">
           {mode === 'auto-match' ? (
             <AutoMatchPanel onApplyTheme={applyGeneratedTheme} currentPrimaryColor={config.appearance.primaryColor} />
@@ -1201,8 +1309,14 @@ function App() {
                   placeholder={locale === 'ar' ? 'الصق هنا CSS أو ألوان الموقع أو font-family أو border-radius...' : 'Paste CSS, colors, font-family, border-radius, or style notes here...'}
                 />
                 <div className="auto-actions">
-                  <button className="primary-button" onClick={analyzeStyleInput} type="button">
-                    {locale === 'ar' ? 'حلّل وطبّق' : 'Analyze & Apply'}
+                  <button className="primary-button" onClick={analyzeStyleInput} type="button" disabled={styleStatus === 'loading'}>
+                    {styleStatus === 'loading'
+                      ? locale === 'ar'
+                        ? 'Gemini يختار الأنسب...'
+                        : 'Gemini is matching...'
+                      : locale === 'ar'
+                        ? 'حلّل واقترح الشكل'
+                        : 'Analyze & Recommend'}
                   </button>
                   <button className="secondary-button" onClick={() => applyPreset('siteaware-default')} type="button">
                     {locale === 'ar' ? 'إرجاع الافتراضي' : 'Reset Default'}
@@ -1214,6 +1328,12 @@ function App() {
                       ? 'هذه أول خطوة: ضع ستايل الموقع هنا، وسأطلع الألوان والانحناءات وأطبقها على المعاينة.'
                       : 'Start here by pasting the site style. The studio will infer colors and shape cues and apply them to the preview.')}
                 </p>
+                {styleReasoning.length ? (
+                  <div className={classNames('style-reasoning', styleStatus === 'error' && 'error')}>
+                    <strong>{locale === 'ar' ? 'لماذا هذا الشكل؟' : 'Why this match?'}</strong>
+                    {styleReasoning.map((reason) => <span key={reason}>{reason}</span>)}
+                  </div>
+                ) : null}
               </section>
 
               <section className="panel-section">
@@ -1287,7 +1407,7 @@ function App() {
                     .map((category) => (
                       <button
                         key={category.id}
-                        className={classNames('category-pill', selectedCategory === category.id && 'active')}
+                        className={classNames('category-pill', extraCategory === category.id && 'active')}
                         onClick={() => setSelectedCategory(category.id)}
                       >
                         <strong>{category.label}</strong>
@@ -1301,15 +1421,15 @@ function App() {
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder={locale === 'ar' ? 'ابحث داخل الخيارات الإضافية' : 'Search the extra options'}
                 />
-                <div className={classNames('variant-grid', `${selectedCategory}-gallery`)}>
+                <div className={classNames('variant-grid', `${extraCategory}-gallery`)}>
                   {activeCategoryItems.map((item) => {
-                    const selectedValue = config[selectedCategory as keyof StudioConfig];
+                    const selectedValue = config[extraCategory as keyof StudioConfig];
                     const isActive = typeof selectedValue === 'string' && selectedValue === item.id;
                     return (
                       <button
                         key={item.id}
                         className={classNames('variant-card', isActive && 'active')}
-                        onClick={() => updateConfig(selectedCategory as keyof StudioConfig, item.id as never)}
+                        onClick={() => updateConfig(extraCategory as keyof StudioConfig, item.id as never)}
                         title={item.note}
                       >
                         <div className="variant-preview">{item.preview}</div>
@@ -1325,6 +1445,11 @@ function App() {
         </aside>
 
         <section className="preview-column">
+          {mode === 'preview' || mode === 'test' ? (
+            <button className="preview-exit-button" onClick={() => setMode('build')} type="button">
+              {locale === 'ar' ? 'العودة إلى التصميم' : 'Back to Studio'}
+            </button>
+          ) : null}
           <div className="preview-toolbar panel">
             <div className="panel-heading">
               <h2>{locale === 'ar' ? 'معاينة مباشرة' : 'Live Preview'}</h2>
@@ -1349,23 +1474,20 @@ function App() {
                   </button>
                 ))}
               </div>
+              <div className={classNames('preview-ai-state', apiHealth?.mode ?? 'error')}>
+                <span aria-hidden="true" />
+                <strong>{apiStatusLabel}</strong>
+              </div>
+              <button className="copilot-template-button" onClick={applyCopilotTemplate} type="button">
+                {locale === 'ar' ? 'طبّق قالب Copilot الجاهز' : 'Apply Copilot Template'}
+              </button>
               <button className={classNames('toggle-launcher', widgetOpen && 'active')} onClick={() => setWidgetOpen((previous) => !previous)}>
                 {widgetOpen ? (locale === 'ar' ? 'الويدجت مفتوح' : 'Widget open') : locale === 'ar' ? 'الويدجت مغلق' : 'Widget closed'}
               </button>
             </div>
           </div>
 
-          <div className="site-frame panel">
-            <div className={classNames('site-frame-inner', `scale-${viewMode}`)}>
-              <div className="site-chrome">
-                <div className="site-address">{currentSite.name.toLowerCase().replace(/\s+/g, '.')} .demo</div>
-                <div className="site-dots">
-                  <span />
-                  <span />
-                  <span />
-                </div>
-              </div>
-              <div className="preview-split" dir="ltr">
+          <div className={classNames('laptop-preview-stage', widgetOpen && 'assistant-open')} dir="ltr">
                 <div className="assistant-dock" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
                   <div
                     className={classNames(
@@ -1394,10 +1516,20 @@ function App() {
                         </div>
                       </div>
                       <div className="widget-actions">
-                        <button className="action-icon" type="button">
+                        <button
+                          className="action-icon"
+                          onClick={() => setWidgetOpen(false)}
+                          aria-label={locale === 'ar' ? 'تصغير المساعد' : 'Minimize assistant'}
+                          type="button"
+                        >
                           −
                         </button>
-                        <button className="action-icon" type="button">
+                        <button
+                          className="action-icon"
+                          onClick={() => setWidgetOpen(false)}
+                          aria-label={locale === 'ar' ? 'إغلاق المساعد' : 'Close assistant'}
+                          type="button"
+                        >
                           ×
                         </button>
                       </div>
@@ -1492,11 +1624,29 @@ function App() {
                   </div>
                 </div>
 
+            <div className="site-frame panel">
+              <div className={classNames('site-frame-inner', `scale-${viewMode}`)}>
                 <div className="site-canvas" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
+                  <div className="site-chrome">
+                    <div className="site-address">{currentSite.name.toLowerCase().replace(/\s+/g, '.')} .demo</div>
+                    <div className="site-dots">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  </div>
                   <div className="mock-site">
                     <div className="preview-zone-label site-zone-label">
                       <span>{locale === 'ar' ? 'الموقع التجريبي' : 'Demo website'}</span>
-                      <strong>{locale === 'ar' ? 'يتقلص عند فتح المساعد' : 'Shrinks beside the assistant'}</strong>
+                      <strong>
+                        {widgetOpen
+                          ? locale === 'ar'
+                            ? 'المساعد فتح · الصفحة تقلصت'
+                            : 'Assistant open · page resized'
+                          : locale === 'ar'
+                            ? 'المساعد مغلق · الصفحة كاملة'
+                            : 'Assistant closed · full page'}
+                      </strong>
                     </div>
                     <div className="site-launcher-overlay" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
                       <div className="preview-zone-label launcher-zone-label site-overlay-label">
