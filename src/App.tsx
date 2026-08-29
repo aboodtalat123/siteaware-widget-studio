@@ -1101,6 +1101,7 @@ function App() {
         `view-${viewMode}`,
         `theme-${activeTheme.id}`,
         `mode-${mode}`,
+        widgetOpen && 'assistant-live-open',
       )}
       dir={locale === 'ar' ? 'rtl' : 'ltr'}
       lang={locale}
@@ -1118,12 +1119,12 @@ function App() {
           </div>
           <p>
             {locale === 'ar'
-              ? 'اختَر شكل الأيقونة والمحادثة أو دع Gemini يرتبهم مباشرة على المعاينة.'
-              : 'Pick the launcher and chat style, or let Gemini restyle them live in the preview.'}
+              ? 'اختَر شكل الأيقونة والمحادثة من نفس الموقع، وكل تغيير يظهر فورًا على المساعد الحقيقي المدمج في الشاشة.'
+              : 'Choose the launcher and chat style on this page, and every change appears instantly on the real integrated assistant.'}
           </p>
           <div className="hero-meta">
-            <span>{locale === 'ar' ? 'الأيقونة داخل الموقع مباشرة' : 'Launcher appears inside the site preview'}</span>
-            <span>{locale === 'ar' ? 'المساعد ثابت على أقصى اليسار' : 'Assistant stays docked on the far left'}</span>
+            <span>{locale === 'ar' ? 'الأيقونة فوق الموقع الحقيقي' : 'Launcher lives on the real page'}</span>
+            <span>{locale === 'ar' ? 'لوحة الذكاء تصغّر الصفحة كاملة' : 'AI dock resizes the whole page'}</span>
           </div>
         </div>
         <div className="hero-actions">
@@ -1175,8 +1176,8 @@ function App() {
                     : 'AI Designer'
                 : item === 'preview'
                   ? locale === 'ar'
-                    ? 'معاينة لابتوب'
-                    : 'Laptop Preview'
+                    ? 'الموقع الحي'
+                    : 'Live Website'
                   : item === 'test'
                     ? locale === 'ar'
                       ? 'تجربة'
@@ -1445,15 +1446,10 @@ function App() {
         </aside>
 
         <section className="preview-column">
-          {mode === 'preview' || mode === 'test' ? (
-            <button className="preview-exit-button" onClick={() => setMode('build')} type="button">
-              {locale === 'ar' ? 'العودة إلى التصميم' : 'Back to Studio'}
-            </button>
-          ) : null}
           <div className="preview-toolbar panel">
             <div className="panel-heading">
-              <h2>{locale === 'ar' ? 'معاينة مباشرة' : 'Live Preview'}</h2>
-              <span>{currentSite.name}</span>
+              <h2>{locale === 'ar' ? 'المساعد يعمل على هذا الموقع الآن' : 'Assistant live on this website'}</h2>
+              <span>{locale === 'ar' ? 'بدون محاكي' : 'No simulator'}</span>
             </div>
               <div className="toolbar-row">
                 <div className="device-toggle" role="tablist" aria-label="Preview size">
@@ -1503,10 +1499,6 @@ function App() {
                       widgetOpen && 'open',
                     )}
                   >
-                    <div className="preview-zone-label assistant-zone-label">
-                      <span>{locale === 'ar' ? 'معاينة المساعد' : 'Assistant preview'}</span>
-                      <strong>{locale === 'ar' ? 'أقصى اليسار' : 'Far left'}</strong>
-                    </div>
                     <div className={classNames('widget-header', config.header)}>
                       <div className="widget-title">
                         <div className="widget-avatar">{currentIconPreview}</div>
@@ -1624,78 +1616,28 @@ function App() {
                   </div>
                 </div>
 
-            <div className="site-frame panel">
-              <div className={classNames('site-frame-inner', `scale-${viewMode}`)}>
-                <div className="site-canvas" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
-                  <div className="site-chrome">
-                    <div className="site-address">{currentSite.name.toLowerCase().replace(/\s+/g, '.')} .demo</div>
-                    <div className="site-dots">
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-                  </div>
-                  <div className="mock-site">
-                    <div className="preview-zone-label site-zone-label">
-                      <span>{locale === 'ar' ? 'الموقع التجريبي' : 'Demo website'}</span>
-                      <strong>
-                        {widgetOpen
-                          ? locale === 'ar'
-                            ? 'المساعد فتح · الصفحة تقلصت'
-                            : 'Assistant open · page resized'
-                          : locale === 'ar'
-                            ? 'المساعد مغلق · الصفحة كاملة'
-                            : 'Assistant closed · full page'}
-                      </strong>
-                    </div>
-                    <div className="site-launcher-overlay" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
-                      <div className="preview-zone-label launcher-zone-label site-overlay-label">
-                        <span>{locale === 'ar' ? 'أيقونة الذكاء على الموقع' : 'AI icon on the site'}</span>
-                        <strong>{locale === 'ar' ? 'تتغير فورًا' : 'Updates instantly'}</strong>
-                      </div>
-                      <button
-                        className={classNames(
-                          'launcher-node',
-                          `launcher-${config.launcher}`,
-                          `launcher-size-${config.appearance.launcherSize}`,
-                          widgetOpen && 'open',
-                        )}
-                        onClick={() => setWidgetOpen((previous) => !previous)}
-                        aria-label={widgetOpen ? (locale === 'ar' ? 'أغلق المساعد' : 'Close assistant') : locale === 'ar' ? 'افتح المساعد' : 'Open assistant'}
-                        aria-pressed={widgetOpen}
-                        type="button"
-                      >
-                        <div className="launcher-preview">{currentIconPreview}</div>
-                        <div className="launcher-copy">
-                          <strong>{locale === 'ar' ? 'اسأل الذكاء' : 'Ask AI'}</strong>
-                          <span>{widgetOpen ? (locale === 'ar' ? 'المساعد مفتوح' : 'Assistant open') : locale === 'ar' ? 'اضغط للفتح' : 'Click to open'}</span>
-                        </div>
-                        <span className="launcher-badge">3</span>
-                      </button>
-                      <p>
-                        {locale === 'ar'
-                          ? 'اختيار الأيقونة أو زر الفتح من الوسط ينعكس هنا مباشرة فوق الموقع.'
-                          : 'Selecting a launcher or icon in the studio updates this in-place site trigger immediately.'}
-                      </p>
-                    </div>
-                    <div className="mock-hero">
-                      <span className="mock-kicker">{locale === 'ar' ? 'موقع تجريبي تفاعلي' : 'Interactive mock website'}</span>
-                      <h3>{currentSite.name}</h3>
-                      <p>{currentSite.blurb}</p>
-                    </div>
+          </div>
 
-                    <div className="mock-content">
-                      {currentSite.lines.map((line, index) => (
-                        <div key={line} className={classNames('mock-row', index === 2 && 'highlight')}>
-                          <span>{line}</span>
-                          <button type="button">{locale === 'ar' ? 'افتح' : 'Open'}</button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+          <div className="site-launcher-overlay live-site-launcher" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
+            <button
+              className={classNames(
+                'launcher-node',
+                `launcher-${config.launcher}`,
+                `launcher-size-${config.appearance.launcherSize}`,
+                widgetOpen && 'open',
+              )}
+              onClick={() => setWidgetOpen((previous) => !previous)}
+              aria-label={widgetOpen ? (locale === 'ar' ? 'أغلق المساعد' : 'Close assistant') : locale === 'ar' ? 'افتح المساعد' : 'Open assistant'}
+              aria-pressed={widgetOpen}
+              type="button"
+            >
+              <div className="launcher-preview">{currentIconPreview}</div>
+              <div className="launcher-copy">
+                <strong>{locale === 'ar' ? 'اسأل الذكاء' : 'Ask AI'}</strong>
+                <span>{widgetOpen ? (locale === 'ar' ? 'المساعد مفتوح' : 'Assistant open') : locale === 'ar' ? 'اضغط للفتح' : 'Click to open'}</span>
               </div>
-            </div>
+              <span className="launcher-badge">3</span>
+            </button>
           </div>
         </section>
 

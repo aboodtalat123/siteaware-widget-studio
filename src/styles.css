@@ -2657,3 +2657,238 @@ button:disabled {
     width: 100%;
   }
 }
+
+/* The studio is the live website: the assistant docks beside the page instead of living in a simulator. */
+.app-shell {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1), margin-left 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.app-shell.assistant-live-open {
+  width: calc(100% - var(--widget-width));
+  margin-left: var(--widget-width);
+}
+
+.app-shell.assistant-live-open .hero {
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+.app-shell.assistant-live-open .hero-title-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 230px);
+  align-items: start;
+}
+
+.app-shell.assistant-live-open .hero-actions {
+  width: 100%;
+}
+
+.app-shell.mode-preview,
+.app-shell.mode-test {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.app-shell.mode-preview .hero,
+.app-shell.mode-test .hero {
+  display: grid;
+}
+
+.studio-grid,
+.mode-preview .studio-grid,
+.mode-test .studio-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  align-items: start;
+}
+
+.preview-column,
+.mode-preview .preview-column,
+.mode-test .preview-column {
+  position: static;
+  display: grid;
+  grid-column: 1;
+  grid-row: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+.left-rail {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.left-rail > .panel-section.sticky {
+  position: static;
+}
+
+.right-rail {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.app-shell.assistant-live-open .studio-grid,
+.app-shell.assistant-live-open.mode-preview .studio-grid,
+.app-shell.assistant-live-open.mode-test .studio-grid {
+  grid-template-columns: 1fr;
+}
+
+.app-shell.assistant-live-open .preview-column {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.app-shell.assistant-live-open .left-rail {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.app-shell.assistant-live-open .right-rail {
+  grid-column: 1;
+  grid-row: 3;
+}
+
+.preview-toolbar {
+  position: relative;
+  z-index: 6;
+}
+
+.laptop-preview-stage,
+.mode-preview .laptop-preview-stage,
+.mode-test .laptop-preview-stage {
+  display: block;
+  width: 0;
+  height: 0;
+  min-height: 0;
+}
+
+.assistant-dock,
+.mode-preview .assistant-dock,
+.mode-test .assistant-dock {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 1000;
+  width: min(var(--widget-width), 100vw);
+  height: 100dvh;
+  min-height: 0;
+  border: 0;
+  border-inline-end: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border));
+  border-radius: 0;
+  box-shadow: 20px 0 60px rgb(0 0 0 / 14%);
+  background: var(--surface);
+}
+
+.mode-preview .widget-shell,
+.mode-test .widget-shell,
+.assistant-dock .widget-shell {
+  height: 100dvh;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.assistant-dock .conversation {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.assistant-dock .message-card,
+.assistant-dock .widget-title,
+.assistant-dock .composer {
+  min-width: 0;
+}
+
+.assistant-dock .message-card {
+  overflow-wrap: anywhere;
+}
+
+.assistant-dock .composer-actions {
+  display: none;
+}
+
+.live-site-launcher {
+  position: fixed;
+  inset: auto 24px 24px auto;
+  z-index: 1100;
+  width: auto;
+  margin: 0;
+  display: block;
+  pointer-events: none;
+}
+
+.live-site-launcher .launcher-node,
+.launcher-bottom-left .live-site-launcher .launcher-node,
+.launcher-bottom-right .live-site-launcher .launcher-node,
+.launcher-left-edge .live-site-launcher .launcher-node,
+.launcher-right-edge .live-site-launcher .launcher-node {
+  position: relative;
+  inset: auto;
+  margin: 0;
+  max-width: min(240px, calc(100vw - 48px));
+  pointer-events: auto;
+}
+
+.live-site-launcher .launcher-node.open {
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--primary) 13%, transparent), 0 18px 46px rgb(0 0 0 / 22%);
+}
+
+@media (max-width: 1100px) {
+  .studio-grid,
+  .mode-preview .studio-grid,
+  .mode-test .studio-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .preview-column,
+  .mode-preview .preview-column,
+  .mode-test .preview-column {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .left-rail {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .right-rail {
+    grid-column: 1;
+    grid-row: 3;
+  }
+}
+
+@media (max-width: 900px) {
+  .app-shell.assistant-live-open {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .assistant-dock,
+  .mode-preview .assistant-dock,
+  .mode-test .assistant-dock {
+    width: 100vw;
+  }
+
+  .app-shell.assistant-live-open .hero-title-row {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell.assistant-live-open .live-site-launcher {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell.mode-preview,
+  .app-shell.mode-test {
+    padding: 16px;
+  }
+
+  .live-site-launcher {
+    inset: auto 14px 14px auto;
+  }
+}
