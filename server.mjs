@@ -170,6 +170,138 @@ function buildPrompt(body) {
   ].join('\n');
 }
 
+function buildDesignPrompt(body) {
+  const locale = body?.locale === 'ar' ? 'ar' : 'en';
+  const site = body?.site && typeof body.site === 'object' ? body.site : {};
+  const config = body?.config && typeof body.config === 'object' ? body.config : {};
+  const catalog = body?.catalog && typeof body.catalog === 'object' ? body.catalog : {};
+  const userPrompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
+  const themeMode = body?.themeMode === 'dark' ? 'dark' : 'light';
+  const siteName = typeof site.name === 'string' ? site.name : 'Current site';
+  const siteVibe = typeof site.vibe === 'string' ? site.vibe : 'General website';
+
+  const instructions =
+    locale === 'ar'
+      ? [
+          'أنت SiteAware AI Designer داخل استوديو تصميم مساعد مواقع.',
+          'مهمتك تحويل طلب المستخدم إلى JSON فقط، بدون أي شرح خارجي أو markdown.',
+          'اختر القيم فقط من الكتالوج المسموح الموجود في الرسالة.',
+          'إذا طلب المستخدم واجهة بيضاء أو عادية ففضّل الثيمات الفاتحة أو الأسود/الأبيض.',
+          'حافظ على الفكرة الأساسية: الأيقونة في أقصى اليمين والمحادثة في أقصى اليسار.',
+          'إذا لم يلزم حقل معيّن فلا تضعه داخل patch.',
+        ]
+      : [
+          'You are the SiteAware AI Designer inside a website assistant studio.',
+          'Convert the user request into JSON only with no markdown or extra prose.',
+          'Pick values only from the allowed catalog included in the request.',
+          'If the user asks for a white or normal site, prefer light or black-and-white themes.',
+          'Preserve the core layout intent: launcher at the far right, assistant at the far left.',
+          'If a field is not necessary, omit it from patch.',
+        ];
+
+  const schemaNote =
+    locale === 'ar'
+      ? `أرجع JSON بهذا الشكل:
+{
+  "summary": "ملخص قصير",
+  "reasoning": ["سبب 1", "سبب 2"],
+  "patch": {
+    "assistantIcon": "id",
+    "launcher": "id",
+    "chatShell": "id",
+    "header": "id",
+    "assistantMessage": "id",
+    "userMessage": "id",
+    "inputBar": "id",
+    "sendButton": "id",
+    "sourceCitation": "id",
+    "takeMeThere": "id",
+    "theme": "id",
+    "themeMode": "light or dark",
+    "widgetOpen": true,
+    "focusCategory": "assistantIcon or launcher or chatShell ...",
+    "appearance": {
+      "radius": "sm|md|lg|xl",
+      "widgetWidth": 420,
+      "widgetHeight": 620,
+      "density": "compact|comfortable|spacious",
+      "fontScale": 1,
+      "shadowStrength": 0.8,
+      "launcherSize": "sm|md|lg",
+      "launcherPosition": "bottom-right|bottom-left|left-edge|right-edge",
+      "primaryColor": "#112233"
+    }
+  }
+}`
+      : `Return JSON in this shape:
+{
+  "summary": "short summary",
+  "reasoning": ["reason 1", "reason 2"],
+  "patch": {
+    "assistantIcon": "id",
+    "launcher": "id",
+    "chatShell": "id",
+    "header": "id",
+    "assistantMessage": "id",
+    "userMessage": "id",
+    "inputBar": "id",
+    "sendButton": "id",
+    "sourceCitation": "id",
+    "takeMeThere": "id",
+    "theme": "id",
+    "themeMode": "light or dark",
+    "widgetOpen": true,
+    "focusCategory": "assistantIcon or launcher or chatShell ...",
+    "appearance": {
+      "radius": "sm|md|lg|xl",
+      "widgetWidth": 420,
+      "widgetHeight": 620,
+      "density": "compact|comfortable|spacious",
+      "fontScale": 1,
+      "shadowStrength": 0.8,
+      "launcherSize": "sm|md|lg",
+      "launcherPosition": "bottom-right|bottom-left|left-edge|right-edge",
+      "primaryColor": "#112233"
+    }
+  }
+}`;
+
+  return [
+    ...instructions,
+    '',
+    `Current site: ${siteName}`,
+    `Site vibe: ${siteVibe}`,
+    `Current theme mode: ${themeMode}`,
+    `Current config: ${JSON.stringify(config)}`,
+    '',
+    `Allowed catalog: ${JSON.stringify(catalog)}`,
+    '',
+    `User request: ${userPrompt}`,
+    '',
+    schemaNote,
+  ].join('\n');
+}
+
+function extractJsonObject(text) {
+  if (typeof text !== 'string' || !text.trim()) {
+    return null;
+  }
+
+  const fencedMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fencedMatch?.[1] ?? text;
+  const start = candidate.indexOf('{');
+  const end = candidate.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(candidate.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
 function isRetryableGeminiFailure(status, message) {
   return status === 429 || status === 503 || status === 504 || /high demand|temporar|rate limit|overload|timed? out|timeout/i.test(message);
 }
@@ -290,6 +422,91 @@ async function handleChat(request, response) {
   }
 }
 
+async function handleDesign(request, response) {
+  if (!geminiKey) {
+    sendJson(response, 503, {
+      ok: false,
+      mode: 'missing_key',
+      provider: 'gemini',
+      model: geminiModel,
+      message: 'GEMINI_API_KEY is missing.',
+    });
+    return;
+  }
+
+  let body;
+  try {
+    body = await safeReadJson(request);
+  } catch {
+    sendJson(response, 400, {
+      ok: false,
+      mode: 'error',
+      provider: 'gemini',
+      model: geminiModel,
+      message: 'Invalid JSON payload.',
+    });
+    return;
+  }
+
+  const prompt = buildDesignPrompt(body);
+
+  try {
+    const candidateModels = [...new Set([geminiModel, geminiFallbackModel].filter(Boolean))];
+    let lastFailure = null;
+
+    for (const model of candidateModels) {
+      const result = await requestGemini(model, prompt);
+      if (result.ok) {
+        const rawReply = extractGeminiText(result.parsed) || result.rawText.trim();
+        const parsed = extractJsonObject(rawReply);
+        if (!parsed || typeof parsed !== 'object') {
+          sendJson(response, 502, {
+            ok: false,
+            mode: 'error',
+            provider: 'gemini',
+            model,
+            message: 'Gemini returned a non-JSON design response.',
+          });
+          return;
+        }
+
+        sendJson(response, 200, {
+          ok: true,
+          mode: 'ready',
+          provider: 'gemini',
+          model,
+          message: model === geminiModel ? 'Gemini design patch generated.' : `Gemini design patch generated with fallback model ${model}.`,
+          summary: typeof parsed.summary === 'string' ? parsed.summary : '',
+          reasoning: Array.isArray(parsed.reasoning) ? parsed.reasoning.filter((item) => typeof item === 'string').slice(0, 4) : [],
+          patch: parsed.patch && typeof parsed.patch === 'object' ? parsed.patch : {},
+        });
+        return;
+      }
+
+      lastFailure = { ...result, model };
+      if (!isRetryableGeminiFailure(result.status, result.message)) {
+        break;
+      }
+    }
+
+    sendJson(response, lastFailure?.status ?? 502, {
+      ok: false,
+      mode: 'error',
+      provider: 'gemini',
+      model: lastFailure?.model ?? geminiModel,
+      message: lastFailure?.message ?? 'Gemini design request failed.',
+    });
+  } catch (error) {
+    sendJson(response, 500, {
+      ok: false,
+      mode: 'error',
+      provider: 'gemini',
+      model: geminiModel,
+      message: error instanceof Error ? error.message : 'Unexpected Gemini design failure.',
+    });
+  }
+}
+
 async function serveStatic(request, response, pathname) {
   let filePath = path.join(distDir, pathname);
   if (pathname === '/' || pathname === '') {
@@ -349,6 +566,22 @@ const server = http.createServer(async (request, response) => {
     }
 
     await handleChat(request, response);
+    return;
+  }
+
+  if (pathname === '/api/design') {
+    if (request.method !== 'POST') {
+      sendJson(response, 405, {
+        ok: false,
+        mode: 'error',
+        provider: 'gemini',
+        model: geminiModel,
+        message: 'Use POST for /api/design.',
+      });
+      return;
+    }
+
+    await handleDesign(request, response);
     return;
   }
 

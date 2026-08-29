@@ -369,6 +369,49 @@ button {
   color: color-mix(in srgb, var(--muted-text) 72%, transparent);
 }
 
+.copilot-intro {
+  margin: 0 0 14px;
+  color: var(--muted-text);
+}
+
+.copilot-textarea {
+  width: 100%;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-secondary) 58%, transparent);
+  color: var(--text);
+  padding: 14px;
+  outline: none;
+  resize: vertical;
+}
+
+.copilot-suggestion-grid,
+.copilot-insight-list {
+  display: grid;
+  gap: 10px;
+}
+
+.copilot-result-card {
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-secondary) 54%, transparent);
+}
+
+.copilot-result-card strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.copilot-result-card p {
+  margin: 0;
+  color: var(--muted-text);
+}
+
+.copilot-result-card.error {
+  border-color: color-mix(in srgb, var(--danger) 38%, var(--border));
+}
+
 .preview-column {
   display: grid;
   gap: 18px;
@@ -421,7 +464,7 @@ button {
 
 .preview-split {
   display: grid;
-  grid-template-columns: minmax(350px, var(--widget-width)) minmax(0, 1fr) minmax(118px, 176px);
+  grid-template-columns: minmax(350px, var(--widget-width)) minmax(0, 1fr);
   gap: 14px;
   align-items: stretch;
   min-height: 780px;
@@ -439,24 +482,6 @@ button {
 
 .site-canvas {
   min-height: 780px;
-}
-
-.launcher-stage {
-  position: relative;
-  min-width: 0;
-  min-height: 780px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 18px;
-  padding: 18px 10px 28px;
-  overflow: hidden;
-  border-radius: calc(var(--radius) + 6px);
-  border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border));
-  background:
-    radial-gradient(circle at 50% 82%, color-mix(in srgb, var(--primary) 20%, transparent), transparent 34%),
-    linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, transparent), color-mix(in srgb, var(--surface-secondary) 76%, transparent));
 }
 
 .preview-zone-label {
@@ -484,32 +509,6 @@ button {
   border: 1px solid var(--border);
   border-radius: 999px;
   backdrop-filter: blur(12px);
-}
-
-.launcher-zone-label {
-  position: absolute;
-  inset: 14px 10px auto;
-  display: grid;
-  justify-items: center;
-  justify-content: stretch;
-  text-align: center;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-}
-
-.launcher-stage > p {
-  margin: 0;
-  max-width: 19ch;
-  color: var(--muted-text);
-  text-align: center;
-  font-size: 0.72rem;
-}
-
-.launcher-connection-line {
-  width: 1px;
-  height: 54px;
-  background: linear-gradient(transparent, var(--primary), transparent);
-  opacity: 0.54;
 }
 
 .site-chrome {
@@ -551,6 +550,39 @@ button {
     linear-gradient(180deg, color-mix(in srgb, var(--surface) 64%, transparent), color-mix(in srgb, var(--background) 88%, black)),
     radial-gradient(circle at top left, color-mix(in srgb, var(--primary) 14%, transparent), transparent 42%);
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+}
+
+.site-launcher-overlay {
+  position: absolute;
+  inset: 22px 22px 22px auto;
+  z-index: 4;
+  width: min(168px, 28%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 14px;
+  pointer-events: none;
+}
+
+.site-overlay-label {
+  position: static;
+  width: 100%;
+  display: grid;
+  justify-items: center;
+  justify-content: stretch;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  backdrop-filter: blur(12px);
+}
+
+.site-launcher-overlay > p {
+  margin: 0;
+  max-width: 18ch;
+  color: var(--muted-text);
+  text-align: end;
+  font-size: 0.72rem;
 }
 
 .mock-hero {
@@ -637,51 +669,52 @@ button {
   margin-bottom: 12px;
 }
 
-.launcher-stage .launcher-node {
+.site-launcher-overlay .launcher-node {
   position: relative;
   inset: auto;
   margin: 0;
   max-width: 100%;
   z-index: 3;
+  pointer-events: auto;
 }
 
-.launcher-stage .launcher-copy {
+.site-launcher-overlay .launcher-copy {
   min-width: 0;
 }
 
-.launcher-stage .launcher-copy span {
+.site-launcher-overlay .launcher-copy span {
   white-space: nowrap;
 }
 
-.launcher-stage .launcher-badge {
+.site-launcher-overlay .launcher-badge {
   margin-inline-start: auto;
   flex: 0 0 auto;
 }
 
-.launcher-stage :is(.launcher-circle-icon, .launcher-rounded-square, .launcher-floating-orb, .launcher-ultra-minimal, .launcher-status-dot) .launcher-copy,
-.launcher-stage :is(.launcher-circle-icon, .launcher-rounded-square, .launcher-floating-orb, .launcher-ultra-minimal, .launcher-status-dot) .launcher-badge {
+.site-launcher-overlay :is(.launcher-circle-icon, .launcher-rounded-square, .launcher-floating-orb, .launcher-ultra-minimal, .launcher-status-dot) .launcher-copy,
+.site-launcher-overlay :is(.launcher-circle-icon, .launcher-rounded-square, .launcher-floating-orb, .launcher-ultra-minimal, .launcher-status-dot) .launcher-badge {
   display: none;
 }
 
-.launcher-stage :is(.launcher-circle-icon, .launcher-rounded-square, .launcher-floating-orb, .launcher-ultra-minimal, .launcher-status-dot) .launcher-preview {
+.site-launcher-overlay :is(.launcher-circle-icon, .launcher-rounded-square, .launcher-floating-orb, .launcher-ultra-minimal, .launcher-status-dot) .launcher-preview {
   width: 100%;
   height: 100%;
   border: 0;
   background: transparent;
 }
 
-.launcher-stage :is(.launcher-pill-label, .launcher-icon-text, .launcher-friendly, .launcher-assistant-name, .launcher-enterprise, .launcher-premium) {
+.site-launcher-overlay :is(.launcher-pill-label, .launcher-icon-text, .launcher-friendly, .launcher-assistant-name, .launcher-enterprise, .launcher-premium) {
   width: min(158px, 100%);
   padding-inline: 10px;
 }
 
-.launcher-stage :is(.launcher-pill-label, .launcher-icon-text, .launcher-friendly, .launcher-assistant-name, .launcher-enterprise, .launcher-premium) .launcher-preview {
+.site-launcher-overlay :is(.launcher-pill-label, .launcher-icon-text, .launcher-friendly, .launcher-assistant-name, .launcher-enterprise, .launcher-premium) .launcher-preview {
   width: 34px;
   height: 34px;
 }
 
-.launcher-stage :is(.launcher-pill-label, .launcher-icon-text, .launcher-friendly, .launcher-assistant-name, .launcher-enterprise, .launcher-premium) .launcher-copy span,
-.launcher-stage :is(.launcher-pill-label, .launcher-icon-text, .launcher-friendly, .launcher-assistant-name, .launcher-enterprise, .launcher-premium) .launcher-badge {
+.site-launcher-overlay :is(.launcher-pill-label, .launcher-icon-text, .launcher-friendly, .launcher-assistant-name, .launcher-enterprise, .launcher-premium) .launcher-copy span,
+.site-launcher-overlay :is(.launcher-pill-label, .launcher-icon-text, .launcher-friendly, .launcher-assistant-name, .launcher-enterprise, .launcher-premium) .launcher-badge {
   display: none;
 }
 
@@ -2136,17 +2169,12 @@ button {
 
   .assistant-dock,
   .site-canvas,
-  .launcher-stage,
   .mock-site {
     min-height: auto;
   }
 
   .assistant-dock {
     min-height: 680px;
-  }
-
-  .launcher-stage {
-    min-height: 260px;
   }
 
   .widget-shell,
@@ -2166,6 +2194,20 @@ button {
 
   .mock-site {
     padding-bottom: 24px;
+  }
+
+  .site-launcher-overlay {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    align-items: flex-end;
+    margin-bottom: 18px;
+    pointer-events: auto;
+  }
+
+  .site-launcher-overlay > p {
+    max-width: none;
+    text-align: start;
   }
 
   .design-focus-grid {

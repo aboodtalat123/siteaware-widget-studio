@@ -28,7 +28,7 @@ import {
 } from './themeIntelligence';
 
 type PreviewMode = 'build' | 'preview' | 'test';
-type StudioMode = PreviewMode | 'auto-match';
+type StudioMode = PreviewMode | 'auto-match' | 'design';
 type ViewMode = 'desktop' | 'tablet' | 'mobile';
 type UILocale = 'en' | 'ar';
 type ThemeMode = 'light' | 'dark';
@@ -54,6 +54,24 @@ type ApiHealth = {
   provider: string;
   model: string;
   message: string;
+};
+
+type DesignPatch = Partial<Omit<StudioConfig, 'appearance'>> & {
+  appearance?: Partial<StudioConfig['appearance']>;
+  themeMode?: ThemeMode;
+  widgetOpen?: boolean;
+  focusCategory?: StudioCategory;
+};
+
+type DesignResponse = {
+  ok: boolean;
+  mode: 'ready' | 'missing_key' | 'error';
+  provider: string;
+  model: string;
+  message: string;
+  summary?: string;
+  reasoning?: string[];
+  patch?: DesignPatch;
 };
 
 const storageKey = 'siteaware-widget-studio-config-v2';
@@ -106,6 +124,21 @@ const previewSites = [
     },
   },
 ] as const;
+
+const designPromptSuggestions = {
+  ar: [
+    'خلّي التصميم أبيض ونظيف، والأيقونة دائرية، والمحادثة احترافية على اليسار.',
+    'بدي ستايل جامعي قريب من الصور: أيقونة يمين صغيرة وشات يسار طويل.',
+    'خفف الاستدارة، كبّر عرض المحادثة، وخلي زر الإرسال دائري وواضح.',
+    'اعمل شكل مؤسسي رسمي بالأسود والأبيض مع محادثة مرتبة ومصادر واضحة.',
+  ],
+  en: [
+    'Make it a clean white widget with a circular launcher and a structured left chat panel.',
+    'Create a university-style assistant with a compact right icon and a tall left docked chat.',
+    'Reduce corner radius, widen the chat, and use a more obvious circular send button.',
+    'Give it a formal black-and-white enterprise style with clear citations and tidy spacing.',
+  ],
+} as const;
 
 function buildInitialConversation(locale: UILocale): ConversationMessage[] {
   if (locale === 'ar') {
@@ -278,6 +311,10 @@ function classNames(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(' ');
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
 function getCollection(category: StudioCategory): VariantItem[] {
   switch (category) {
     case 'assistantIcon':
@@ -336,6 +373,12 @@ function App() {
   const [namedPreset, setNamedPreset] = useState('My preset');
   const [savedPresets, setSavedPresets] = useState<SavedPreset[]>(loadSavedPresets);
   const [importConfigText, setImportConfigText] = useState(() => JSON.stringify(loadConfig(), null, 2));
+  const [designPrompt, setDesignPrompt] = useState(() =>
+    'Make the launcher compact on the far right and the assistant a wider left dock with a clean white theme.',
+  );
+  const [designStatus, setDesignStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [designSummary, setDesignSummary] = useState('');
+  const [designReasoning, setDesignReasoning] = useState<string[]>([]);
 
   useEffect(() => {
     storeConfig(config);
@@ -405,6 +448,11 @@ function App() {
     setWidgetOpen(true);
     setStatus('idle');
     setIsTyping(false);
+    setDesignPrompt(
+      locale === 'ar'
+        ? 'خلّي أيقونة الذكاء على أقصى اليمين والمحادثة على أقصى اليسار بشكل أبيض مرتب.'
+        : 'Keep the AI launcher on the far right and the assistant on the far left with a clean white look.',
+    );
   }, [selectedSite.id, locale]);
 
   const resolvedAutoTheme = activeAutoTheme ? applyPrimaryOverride(activeAutoTheme, config.appearance.primaryColor) : null;
@@ -440,8 +488,6 @@ function App() {
   }, [search, selectedCategory]);
 
   const configJson = useMemo(() => JSON.stringify(config, null, 2), [config]);
-
-  const previewScale = viewMode === 'mobile' ? 0.86 : viewMode === 'tablet' ? 0.94 : 1;
 
   const visibleCounts = {
     assistantIcon: assistantIcons.length,
@@ -518,6 +564,113 @@ function App() {
     setConfig(preset.config);
     setActiveAutoTheme(null);
     setWidgetOpen(true);
+  }
+
+  function normalizeDesignPatch(patch: DesignPatch | undefined): DesignPatch {
+    if (!patch || typeof patch !== 'object') {
+      return {};
+    }
+
+    const categoryIds = new Set(categories.map((item) => item.id));
+    const optionSets = {
+      assistantIcon: new Set(assistantIcons.map((item) => item.id)),
+      launcher: new Set(launcherVariants.map((item) => item.id)),
+      chatShell: new Set(chatShellVariants.map((item) => item.id)),
+      header: new Set(headerVariants.map((item) => item.id)),
+      assistantMessage: new Set(assistantMessages.map((item) => item.id)),
+      userMessage: new Set(userMessages.map((item) => item.id)),
+      inputBar: new Set(inputBars.map((item) => item.id)),
+      sendButton: new Set(sendButtons.map((item) => item.id)),
+      sourceCitation: new Set(sourceCitationVariants.map((item) => item.id)),
+      takeMeThere: new Set(takeMeThereVariants.map((item) => item.id)),
+      theme: new Set(themePalettes.map((item) => item.id)),
+    } as const;
+
+    const nextPatch: DesignPatch = {};
+    for (const key of Object.keys(optionSets) as Array<keyof typeof optionSets>) {
+      const candidate = patch[key];
+      if (typeof candidate === 'string' && optionSets[key].has(candidate)) {
+        nextPatch[key] = candidate as never;
+      }
+    }
+
+    if (patch.appearance && typeof patch.appearance === 'object') {
+      const appearance = patch.appearance;
+      const nextAppearance: Partial<StudioConfig['appearance']> = {};
+
+      if (appearance.radius && ['sm', 'md', 'lg', 'xl'].includes(appearance.radius)) {
+        nextAppearance.radius = appearance.radius;
+      }
+      if (typeof appearance.widgetWidth === 'number') {
+        nextAppearance.widgetWidth = clamp(Math.round(appearance.widgetWidth), 360, 520);
+      }
+      if (typeof appearance.widgetHeight === 'number') {
+        nextAppearance.widgetHeight = clamp(Math.round(appearance.widgetHeight), 500, 760);
+      }
+      if (appearance.density && ['compact', 'comfortable', 'spacious'].includes(appearance.density)) {
+        nextAppearance.density = appearance.density;
+      }
+      if (typeof appearance.fontScale === 'number') {
+        nextAppearance.fontScale = clamp(Number(appearance.fontScale.toFixed(2)), 0.9, 1.12);
+      }
+      if (typeof appearance.shadowStrength === 'number') {
+        nextAppearance.shadowStrength = clamp(Number(appearance.shadowStrength.toFixed(2)), 0.45, 1.2);
+      }
+      if (appearance.launcherSize && ['sm', 'md', 'lg'].includes(appearance.launcherSize)) {
+        nextAppearance.launcherSize = appearance.launcherSize;
+      }
+      if (appearance.launcherPosition && ['bottom-right', 'bottom-left', 'left-edge', 'right-edge'].includes(appearance.launcherPosition)) {
+        nextAppearance.launcherPosition = appearance.launcherPosition;
+      }
+      if (typeof appearance.primaryColor === 'string' && /^#[0-9a-f]{6}$/i.test(appearance.primaryColor.trim())) {
+        nextAppearance.primaryColor = appearance.primaryColor.trim();
+      }
+
+      if (Object.keys(nextAppearance).length) {
+        nextPatch.appearance = nextAppearance;
+      }
+    }
+
+    if (patch.themeMode === 'light' || patch.themeMode === 'dark') {
+      nextPatch.themeMode = patch.themeMode;
+    }
+    if (typeof patch.widgetOpen === 'boolean') {
+      nextPatch.widgetOpen = patch.widgetOpen;
+    }
+    if (typeof patch.focusCategory === 'string' && categoryIds.has(patch.focusCategory)) {
+      nextPatch.focusCategory = patch.focusCategory;
+    }
+
+    return nextPatch;
+  }
+
+  function applyDesignPatch(patch: DesignPatch) {
+    const normalized = normalizeDesignPatch(patch);
+    const { appearance, themeMode: nextThemeMode, widgetOpen: nextWidgetOpen, focusCategory, ...rest } = normalized;
+
+    if (Object.keys(rest).length || appearance) {
+      setConfig((previous) => ({
+        ...previous,
+        ...rest,
+        appearance: {
+          ...previous.appearance,
+          ...(appearance ?? {}),
+        },
+      }));
+      setActiveAutoTheme(null);
+    }
+
+    if (nextThemeMode) {
+      setThemeMode(nextThemeMode);
+    }
+    if (typeof nextWidgetOpen === 'boolean') {
+      setWidgetOpen(nextWidgetOpen);
+    } else {
+      setWidgetOpen(true);
+    }
+    if (focusCategory) {
+      setSelectedCategory(focusCategory);
+    }
   }
 
   function resetStudio() {
@@ -697,6 +850,78 @@ function App() {
     setWidgetOpen(true);
   }
 
+  async function runDesignCopilot() {
+    if (!designPrompt.trim()) {
+      return;
+    }
+
+    setMode('design');
+    setDesignStatus('loading');
+    setDesignSummary('');
+    setDesignReasoning([]);
+
+    const catalog = {
+      assistantIcon: assistantIcons.map(({ id, label, note }) => ({ id, label, note })),
+      launcher: launcherVariants.map(({ id, label, note }) => ({ id, label, note })),
+      chatShell: chatShellVariants.map(({ id, label, note }) => ({ id, label, note })),
+      header: headerVariants.map(({ id, label, note }) => ({ id, label, note })),
+      assistantMessage: assistantMessages.map(({ id, label, note }) => ({ id, label, note })),
+      userMessage: userMessages.map(({ id, label, note }) => ({ id, label, note })),
+      inputBar: inputBars.map(({ id, label, note }) => ({ id, label, note })),
+      sendButton: sendButtons.map(({ id, label, note }) => ({ id, label, note })),
+      sourceCitation: sourceCitationVariants.map(({ id, label, note }) => ({ id, label, note })),
+      takeMeThere: takeMeThereVariants.map(({ id, label, note }) => ({ id, label, note })),
+      theme: themePalettes.map(({ id, label, note }) => ({ id, label, note })),
+      radius: ['sm', 'md', 'lg', 'xl'],
+      density: ['compact', 'comfortable', 'spacious'],
+      launcherSize: ['sm', 'md', 'lg'],
+      launcherPosition: ['bottom-right', 'bottom-left', 'left-edge', 'right-edge'],
+      focusCategory: categories.map(({ id, label }) => ({ id, label })),
+    };
+
+    try {
+      const response = await fetch('/api/design', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          locale,
+          prompt: designPrompt.trim(),
+          site: currentSite,
+          config,
+          themeMode,
+          catalog,
+        }),
+      });
+
+      const data = (await response.json()) as DesignResponse;
+      if (!response.ok) {
+        throw new Error(data.message || `Request failed with ${response.status}`);
+      }
+
+      applyDesignPatch(data.patch ?? {});
+      setDesignSummary(
+        data.summary ??
+          (locale === 'ar'
+            ? 'تم تطبيق تعديلات الذكاء على التصميم الحالي.'
+            : 'The AI designer applied changes to the current widget.'),
+      );
+      setDesignReasoning(Array.isArray(data.reasoning) ? data.reasoning.slice(0, 4) : []);
+      setDesignStatus('idle');
+    } catch (error) {
+      setDesignStatus('error');
+      setDesignSummary(
+        error instanceof Error && error.message
+          ? error.message
+          : locale === 'ar'
+            ? 'تعذر تنفيذ تعديل الذكاء الآن.'
+            : 'The AI designer could not apply changes right now.',
+      );
+      setDesignReasoning([]);
+    }
+  }
+
   const themeStyle = buildThemeStyle(activeTheme, config.appearance);
   const modeStyle = buildThemeModeStyle(themeMode);
   const apiStatusLabel =
@@ -734,8 +959,8 @@ function App() {
           <h1>{locale === 'ar' ? 'صمّم. عاين. اختبر.' : 'Design. Preview. Test.'}</h1>
           <p>
             {locale === 'ar'
-              ? 'ابنِ أشكال المساعد والمحادثة بصريًا، بدّل بين الإعدادات، وصدّر نفس عقد التصميم الذي سيقرأه الويدجت لاحقًا.'
-              : 'Build widget variants visually, search the galleries, switch between presets, and export the same design contract the real widget can read later.'}
+              ? 'ابنِ شكل المساعد يدويًا أو اطلب من Gemini يعيد ترتيب الأيقونة والمحادثة والثيم فورًا داخل نفس المعاينة.'
+              : 'Build the assistant manually or ask Gemini to restyle the launcher, chat shell, and layout live inside the same preview.'}
           </p>
         </div>
         <div className="hero-actions">
@@ -765,12 +990,16 @@ function App() {
 
       <section className="mode-strip panel">
         <div className="mode-buttons">
-          {(['build', 'preview', 'test', 'auto-match'] as const).map((item) => (
+          {(['build', 'design', 'preview', 'test', 'auto-match'] as const).map((item) => (
             <button key={item} className={classNames('mode-pill', mode === item && 'active')} onClick={() => setMode(item)}>
               {item === 'build'
                 ? locale === 'ar'
                   ? 'البناء'
                   : 'Build'
+                : item === 'design'
+                  ? locale === 'ar'
+                    ? 'مصمم AI'
+                    : 'AI Designer'
                 : item === 'preview'
                   ? locale === 'ar'
                     ? 'معاينة'
@@ -793,6 +1022,105 @@ function App() {
         <aside className="panel left-rail">
           {mode === 'auto-match' ? (
             <AutoMatchPanel onApplyTheme={applyGeneratedTheme} currentPrimaryColor={config.appearance.primaryColor} />
+          ) : mode === 'design' ? (
+            <>
+              <section className="panel-section sticky">
+                <div className="panel-heading">
+                  <h2>{locale === 'ar' ? 'مصمم الذكاء' : 'AI Designer'}</h2>
+                  <span>{locale === 'ar' ? 'Copilot للتنسيق' : 'Design copilot'}</span>
+                </div>
+                <p className="copilot-intro">
+                  {locale === 'ar'
+                    ? 'اكتب كيف تريد شكل الأيقونة والمحادثة والثيم، وسأحوّل الطلب إلى إعدادات حقيقية تطبق مباشرة على اليسار واليمين والوسط.'
+                    : 'Describe the launcher, chat shell, and overall style, and the copilot will convert that request into real widget settings.'}
+                </p>
+                <textarea
+                  className="copilot-textarea"
+                  rows={7}
+                  value={designPrompt}
+                  onChange={(event) => setDesignPrompt(event.target.value)}
+                  placeholder={locale === 'ar' ? 'مثال: خلي التصميم أبيض، زر الإرسال دائري، والمحادثة مرتبة مثل بوابة جامعية.' : 'Example: Make it white, use a circular send button, and keep the left dock tidy like a university portal.'}
+                />
+                <div className="auto-actions">
+                  <button className="primary-button" onClick={runDesignCopilot} type="button">
+                    {designStatus === 'loading'
+                      ? locale === 'ar'
+                        ? 'جاري التطبيق...'
+                        : 'Applying...'
+                      : locale === 'ar'
+                        ? 'طبّق بالذكاء'
+                        : 'Apply with AI'}
+                  </button>
+                  <button
+                    className="secondary-button"
+                    onClick={() => {
+                      setDesignPrompt(designPromptSuggestions[locale][0]);
+                    }}
+                    type="button"
+                  >
+                    {locale === 'ar' ? 'حمّل مثال' : 'Load Example'}
+                  </button>
+                </div>
+              </section>
+
+              <section className="panel-section">
+                <div className="panel-heading">
+                  <h2>{locale === 'ar' ? 'أوامر جاهزة' : 'Prompt Shortcuts'}</h2>
+                  <span>{locale === 'ar' ? 'ابدأ منها' : 'Start from these'}</span>
+                </div>
+                <div className="copilot-suggestion-grid">
+                  {designPromptSuggestions[locale].map((suggestion) => (
+                    <button key={suggestion} className="sample-card" onClick={() => setDesignPrompt(suggestion)} type="button">
+                      <strong>{locale === 'ar' ? 'اقتراح' : 'Suggestion'}</strong>
+                      <span>{suggestion}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="panel-section">
+                <div className="panel-heading">
+                  <h2>{locale === 'ar' ? 'آخر نتيجة' : 'Last Result'}</h2>
+                  <span>{locale === 'ar' ? 'ملخص التعديلات' : 'Applied changes'}</span>
+                </div>
+                <div className={classNames('copilot-result-card', designStatus === 'error' && 'error')}>
+                  <strong>
+                    {designStatus === 'loading'
+                      ? locale === 'ar'
+                        ? 'Gemini يعيد تركيب التصميم الآن'
+                        : 'Gemini is recomposing the widget now'
+                      : locale === 'ar'
+                        ? 'ملخص التنفيذ'
+                        : 'Execution summary'}
+                  </strong>
+                  <p>
+                    {designSummary ||
+                      (locale === 'ar'
+                        ? 'سيظهر هنا سبب التغييرات التي طبقها الذكاء على الأيقونة والمحادثة والثيم.'
+                        : 'The copilot will explain the design changes it applied to the launcher, chat shell, and theme.')}
+                  </p>
+                </div>
+                <div className="copilot-insight-list">
+                  {designReasoning.length ? (
+                    designReasoning.map((reason) => (
+                      <div key={reason} className="analysis-card">
+                        <strong>{locale === 'ar' ? 'سبب' : 'Reason'}</strong>
+                        <span>{reason}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="analysis-card">
+                      <strong>{locale === 'ar' ? 'ماذا يفعل؟' : 'What it does'}</strong>
+                      <span>
+                        {locale === 'ar'
+                          ? 'يقرأ طلبك، يختار من القوالب المسموحة فقط، ثم يطبقها على المعاينة الحالية بدون تخريب الهيكل.'
+                          : 'It reads your prompt, chooses only from the allowed design variants, and applies them to the live preview without freeform CSS drift.'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </section>
+            </>
           ) : (
             <>
               <section className="panel-section sticky">
@@ -960,8 +1288,8 @@ function App() {
                       <div className="widget-title">
                         <div className="widget-avatar">{currentIconPreview}</div>
                         <div>
-                          <strong>SiteAware</strong>
-                          <span>{locale === 'ar' ? `المساعد التجريبي على ${currentSite.vibe}` : `Mock assistant on ${currentSite.vibe}`}</span>
+                          <strong>{locale === 'ar' ? 'مساعد SiteAware' : 'SiteAware Assistant'}</strong>
+                          <span>{locale === 'ar' ? `مساعد رسمي مدمج على ${currentSite.vibe}` : `Formal embedded assistant for ${currentSite.vibe}`}</span>
                         </div>
                       </div>
                       <div className="widget-actions">
@@ -1069,6 +1397,36 @@ function App() {
                       <span>{locale === 'ar' ? 'الموقع التجريبي' : 'Demo website'}</span>
                       <strong>{locale === 'ar' ? 'يتقلص عند فتح المساعد' : 'Shrinks beside the assistant'}</strong>
                     </div>
+                    <div className="site-launcher-overlay" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
+                      <div className="preview-zone-label launcher-zone-label site-overlay-label">
+                        <span>{locale === 'ar' ? 'أيقونة الذكاء على الموقع' : 'AI icon on the site'}</span>
+                        <strong>{locale === 'ar' ? 'تتغير فورًا' : 'Updates instantly'}</strong>
+                      </div>
+                      <button
+                        className={classNames(
+                          'launcher-node',
+                          `launcher-${config.launcher}`,
+                          `launcher-size-${config.appearance.launcherSize}`,
+                          widgetOpen && 'open',
+                        )}
+                        onClick={() => setWidgetOpen((previous) => !previous)}
+                        aria-label={widgetOpen ? (locale === 'ar' ? 'أغلق المساعد' : 'Close assistant') : locale === 'ar' ? 'افتح المساعد' : 'Open assistant'}
+                        aria-pressed={widgetOpen}
+                        type="button"
+                      >
+                        <div className="launcher-preview">{currentIconPreview}</div>
+                        <div className="launcher-copy">
+                          <strong>{locale === 'ar' ? 'اسأل الذكاء' : 'Ask AI'}</strong>
+                          <span>{widgetOpen ? (locale === 'ar' ? 'المساعد مفتوح' : 'Assistant open') : locale === 'ar' ? 'اضغط للفتح' : 'Click to open'}</span>
+                        </div>
+                        <span className="launcher-badge">3</span>
+                      </button>
+                      <p>
+                        {locale === 'ar'
+                          ? 'اختيار الأيقونة أو زر الفتح من الوسط ينعكس هنا مباشرة فوق الموقع.'
+                          : 'Selecting a launcher or icon in the studio updates this in-place site trigger immediately.'}
+                      </p>
+                    </div>
                     <div className="mock-hero">
                       <span className="mock-kicker">{locale === 'ar' ? 'موقع تجريبي تفاعلي' : 'Interactive mock website'}</span>
                       <h3>{currentSite.name}</h3>
@@ -1084,34 +1442,6 @@ function App() {
                       ))}
                     </div>
                   </div>
-                </div>
-
-                <div className="launcher-stage" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
-                  <div className="preview-zone-label launcher-zone-label">
-                    <span>{locale === 'ar' ? 'أيقونة الذكاء' : 'AI launcher'}</span>
-                    <strong>{locale === 'ar' ? 'أقصى اليمين' : 'Far right'}</strong>
-                  </div>
-                  <button
-                    className={classNames(
-                      'launcher-node',
-                      `launcher-${config.launcher}`,
-                      `launcher-size-${config.appearance.launcherSize}`,
-                      widgetOpen && 'open',
-                    )}
-                    onClick={() => setWidgetOpen((previous) => !previous)}
-                    aria-label={widgetOpen ? (locale === 'ar' ? 'أغلق المساعد' : 'Close assistant') : locale === 'ar' ? 'افتح المساعد' : 'Open assistant'}
-                    aria-pressed={widgetOpen}
-                    type="button"
-                  >
-                    <div className="launcher-preview">{currentIconPreview}</div>
-                    <div className="launcher-copy">
-                      <strong>{locale === 'ar' ? 'اسأل الذكاء' : 'Ask AI'}</strong>
-                      <span>{widgetOpen ? (locale === 'ar' ? 'المساعد مفتوح' : 'Assistant open') : locale === 'ar' ? 'اضغط للفتح' : 'Click to open'}</span>
-                    </div>
-                    <span className="launcher-badge">3</span>
-                  </button>
-                  <span className="launcher-connection-line" aria-hidden="true" />
-                  <p>{locale === 'ar' ? 'غيّر شكل الأيقونة أو زر الفتح من الخيارات، وسترى النتيجة هنا فوراً.' : 'Change the icon or launcher template and see it here instantly.'}</p>
                 </div>
               </div>
               <div className={classNames('api-status-pill', apiHealth?.mode ?? 'error')}>
