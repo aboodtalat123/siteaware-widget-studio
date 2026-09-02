@@ -82,7 +82,7 @@ const savedPresetsKey = 'siteaware-widget-studio-presets-v1';
 const localeKey = 'siteaware-widget-studio-locale-v1';
 const themeModeKey = 'siteaware-widget-studio-theme-mode-v1';
 
-const defaultPreset = presetDefinitions.find((preset) => preset.id === 'siteaware-default') ?? presetDefinitions[0]!;
+const defaultPreset = presetDefinitions.find((preset) => preset.id === 'apple-calm') ?? presetDefinitions[0]!;
 const defaultConfig: StudioConfig = defaultPreset.config;
 const defaultStyleInput = `:root {
   --primary: #2563eb;
@@ -93,7 +93,7 @@ const defaultStyleInput = `:root {
 }
 
 body {
-  font-family: "Inter", sans-serif;
+  font-family: "Manrope", sans-serif;
 }`;
 
 const previewSites = [
@@ -442,6 +442,8 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem(localeKey, locale);
+    document.documentElement.lang = locale;
+    document.documentElement.dir = locale === 'ar' ? 'rtl' : 'ltr';
   }, [locale]);
 
   useEffect(() => {
@@ -506,6 +508,14 @@ function App() {
   const resolvedAutoTheme = activeAutoTheme ? applyPrimaryOverride(activeAutoTheme, config.appearance.primaryColor) : null;
   const activeTheme = resolvedAutoTheme ?? themePalettes.find((theme) => theme.id === config.theme) ?? themePalettes[0]!;
   const currentIconPreview = assistantIcons.find((item) => item.id === config.assistantIcon)?.preview ?? assistantIcons[0]?.preview ?? null;
+  const currentChatShell = chatShellVariants.find((item) => item.id === config.chatShell);
+  const currentAssistantMessage = assistantMessages.find((item) => item.id === config.assistantMessage);
+  const currentUserMessage = userMessages.find((item) => item.id === config.userMessage);
+  const currentInputBar = inputBars.find((item) => item.id === config.inputBar);
+  const currentSendButton = sendButtons.find((item) => item.id === config.sendButton);
+  const currentHeader = headerVariants.find((item) => item.id === config.header);
+  const currentSource = sourceCitationVariants.find((item) => item.id === config.sourceCitation);
+  const currentCta = takeMeThereVariants.find((item) => item.id === config.takeMeThere);
   const currentSourceLabel =
     sourceCitationVariants.find((item) => item.id === config.sourceCitation)?.label ?? (locale === 'ar' ? 'المصادر' : 'Sources');
   const currentCtaLabel = takeMeThereVariants.find((item) => item.id === config.takeMeThere)?.label ?? (locale === 'ar' ? 'خذني لهناك' : 'Take me there');
@@ -571,6 +581,7 @@ function App() {
       return;
     }
     setConfig(preset.config);
+    setThemeMode(['dark-ai', 'premium'].includes(presetId) ? 'dark' : 'light');
     setActiveAutoTheme(null);
     setWidgetOpen(true);
     setConversation(buildInitialConversation(locale));
@@ -1297,6 +1308,45 @@ function App() {
             </>
           ) : (
             <>
+              <section className="panel-section experience-templates-section">
+                <div className="section-kicker">{locale === 'ar' ? 'ابدأ من شكل جاهز' : 'Start with a complete look'}</div>
+                <div className="panel-heading section-heading-large">
+                  <h2>{locale === 'ar' ? 'قوالب مساعد كاملة' : 'Complete assistant templates'}</h2>
+                  <span>{locale === 'ar' ? 'طبّق القالب ثم عدّل كل تفصيل' : 'Apply, then tune every detail'}</span>
+                </div>
+                <div className="experience-template-grid">
+                  {presetDefinitions.map((preset) => {
+                    const presetTheme = themePalettes.find((theme) => theme.id === preset.config.theme);
+                    const isActive = config.chatShell === preset.config.chatShell
+                      && config.assistantMessage === preset.config.assistantMessage
+                      && config.sendButton === preset.config.sendButton
+                      && config.theme === preset.config.theme;
+                    return (
+                      <button
+                        key={preset.id}
+                        className={classNames('experience-template-card', isActive && 'active')}
+                        onClick={() => applyPreset(preset.id)}
+                        style={{ ['--template-accent' as string]: presetTheme?.tokens.primary ?? config.appearance.primaryColor }}
+                        type="button"
+                      >
+                        <span className="experience-template-visual" aria-hidden="true">
+                          <span className="template-window-top"><i /><i /><i /></span>
+                          <span className="template-answer-line long" />
+                          <span className="template-answer-line" />
+                          <span className="template-user-line" />
+                          <span className="template-input-line"><i /><b>↑</b></span>
+                        </span>
+                        <span className="experience-template-copy">
+                          <strong>{preset.label}</strong>
+                          <small>{preset.note}</small>
+                        </span>
+                        <span className="template-apply">{locale === 'ar' ? 'تطبيق' : 'Apply'}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
               <section className="panel-section sticky">
                 <div className="panel-heading">
                   <h2>{locale === 'ar' ? '1. ستايل الموقع' : '1. Site Style'}</h2>
@@ -1361,17 +1411,26 @@ function App() {
               <section className="panel-section">
                 <div className="panel-heading">
                   <h2>{locale === 'ar' ? '3. تمبليت المحادثة' : '3. Chat Templates'}</h2>
-                  <span>{locale === 'ar' ? 'شكل الشات والزر معًا' : 'Chat shell + launcher feel'}</span>
+                  <span>{locale === 'ar' ? 'شكل نافذة المحادثة كاملة' : 'The complete conversation frame'}</span>
                 </div>
-                <div className="design-focus-grid">
+                <div className="chat-template-grid">
                   {chatShellVariants.map((item) => (
                     <button
                       key={item.id}
-                      className={classNames('design-focus-card', config.chatShell === item.id && 'active')}
+                      className={classNames('chat-template-card', `choice-${item.id}`, config.chatShell === item.id && 'active')}
                       onClick={() => updateConfig('chatShell', item.id)}
+                      type="button"
                     >
-                      <strong>{item.label}</strong>
-                      <span>{item.note}</span>
+                      <span className="chat-template-mini" aria-hidden="true">
+                        <span className="mini-chat-head"><i /><b /><i /></span>
+                        <span className="mini-chat-answer"><i /><i /></span>
+                        <span className="mini-chat-user" />
+                        <span className="mini-chat-composer"><i /><b>↑</b></span>
+                      </span>
+                      <span className="choice-copy">
+                        <strong>{item.label}</strong>
+                        <small>{item.note}</small>
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -1379,7 +1438,71 @@ function App() {
 
               <section className="panel-section">
                 <div className="panel-heading">
-                  <h2>{locale === 'ar' ? '4. أشهر الألوان' : '4. Popular Colors'}</h2>
+                  <h2>{locale === 'ar' ? '4. شكل رد الذكاء' : '4. AI Response Styles'}</h2>
+                  <span>{locale === 'ar' ? 'كيف يظهر الجواب والمصادر' : 'How answers and sources appear'}</span>
+                </div>
+                <div className="response-style-grid">
+                  {assistantMessages.map((item) => (
+                    <button
+                      key={item.id}
+                      className={classNames('response-style-card', `choice-${item.id}`, config.assistantMessage === item.id && 'active')}
+                      onClick={() => updateConfig('assistantMessage', item.id)}
+                      type="button"
+                    >
+                      <span className="response-style-mini" aria-hidden="true">
+                        <span className="response-mini-meta"><i /> SiteAware</span>
+                        <span className="response-mini-line long" />
+                        <span className="response-mini-line" />
+                        <span className="response-mini-sources"><i /><i /></span>
+                      </span>
+                      <strong>{item.label}</strong>
+                      <small>{item.note}</small>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="panel-section composer-library-section">
+                <div className="panel-heading">
+                  <h2>{locale === 'ar' ? '5. السؤال وزر الإرسال' : '5. Composer & Send Button'}</h2>
+                  <span>{locale === 'ar' ? 'اختر الحقل والزر كل واحد لحاله' : 'Choose the field and action separately'}</span>
+                </div>
+                <h3 className="choice-subheading">{locale === 'ar' ? 'شكل حقل السؤال' : 'Input bar style'}</h3>
+                <div className="composer-style-grid">
+                  {inputBars.map((item) => (
+                    <button
+                      key={item.id}
+                      className={classNames('composer-style-card', `choice-${item.id}`, config.inputBar === item.id && 'active')}
+                      onClick={() => updateConfig('inputBar', item.id)}
+                      type="button"
+                    >
+                      <span className="composer-style-mini" aria-hidden="true">
+                        <span>{locale === 'ar' ? 'اسأل أي شيء...' : 'Ask anything...'}</span>
+                        <i>+</i>
+                      </span>
+                      <strong>{item.label}</strong>
+                    </button>
+                  ))}
+                </div>
+                <h3 className="choice-subheading send-heading">{locale === 'ar' ? 'شكل زر الإرسال' : 'Send button style'}</h3>
+                <div className="send-style-grid">
+                  {sendButtons.map((item) => (
+                    <button
+                      key={item.id}
+                      className={classNames('send-style-card', `choice-${item.id}`, config.sendButton === item.id && 'active')}
+                      onClick={() => updateConfig('sendButton', item.id)}
+                      type="button"
+                    >
+                      <span className="send-style-demo" aria-hidden="true">{item.preview}</span>
+                      <span><strong>{item.label}</strong><small>{item.note}</small></span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="panel-section">
+                <div className="panel-heading">
+                  <h2>{locale === 'ar' ? '6. أشهر الألوان' : '6. Popular Colors'}</h2>
                   <span>{locale === 'ar' ? 'اختيار سريع للهوية' : 'Quick visual direction'}</span>
                 </div>
                 <div className="theme-grid">
@@ -1399,12 +1522,12 @@ function App() {
 
               <section className="panel-section">
                 <div className="panel-heading">
-                  <h2>{locale === 'ar' ? '5. أشياء إضافية' : '5. More Options'}</h2>
-                  <span>{locale === 'ar' ? 'زر الفتح والرسائل والإرسال' : 'Launcher, messages, input, more'}</span>
+                  <h2>{locale === 'ar' ? '7. التفاصيل المتقدمة' : '7. Advanced Details'}</h2>
+                  <span>{locale === 'ar' ? 'المشغّل ورسالتك والرأس والمصادر' : 'Launcher, your message, header, sources'}</span>
                 </div>
                 <div className="category-list">
                   {categories
-                    .filter((category) => !['assistantIcon', 'chatShell', 'theme'].includes(category.id))
+                    .filter((category) => !['assistantIcon', 'chatShell', 'assistantMessage', 'inputBar', 'sendButton', 'theme'].includes(category.id))
                     .map((category) => (
                       <button
                         key={category.id}
@@ -1488,18 +1611,12 @@ function App() {
                   <div
                     className={classNames(
                       'widget-shell',
-                      `shell-${config.chatShell}`,
-                      `header-${config.header}`,
-                      `assistant-${config.assistantMessage}`,
-                      `user-${config.userMessage}`,
-                      `input-${config.inputBar}`,
-                      `send-${config.sendButton}`,
-                      `source-${config.sourceCitation}`,
-                      `cta-${config.takeMeThere}`,
+                      currentChatShell?.className,
+                      currentHeader?.className,
                       widgetOpen && 'open',
                     )}
                   >
-                    <div className={classNames('widget-header', config.header)}>
+                    <div className={classNames('widget-header', currentHeader?.className)}>
                       <div className="widget-title">
                         <div className="widget-avatar">{currentIconPreview}</div>
                         <div>
@@ -1532,7 +1649,7 @@ function App() {
                         if (message.role === 'user') {
                           return (
                             <div key={message.id} className={classNames('message-row', 'user-row')}>
-                              <div className={classNames('message-card', 'user-message')}>
+                              <div className={classNames('message-card', 'user-message', currentUserMessage?.className)}>
                                 <p>{message.text}</p>
                               </div>
                             </div>
@@ -1542,7 +1659,7 @@ function App() {
                         return (
                           <div key={message.id} className={classNames('message-row', 'assistant-row')}>
                             <div className="message-avatar">{currentIconPreview}</div>
-                            <div className={classNames('message-card', 'assistant-message')}>
+                            <div className={classNames('message-card', 'assistant-message', currentAssistantMessage?.className)}>
                               <div className="message-meta">
                                 <span>SiteAware</span>
                                 {message.status === 'typing' ? <span className="status-dot">{locale === 'ar' ? 'يكتب' : 'typing'}</span> : null}
@@ -1551,7 +1668,7 @@ function App() {
                               </div>
                               <p>{message.text}</p>
                               {message.sources?.length ? (
-                                <div className="source-block">
+                                <div className={classNames('source-block', currentSource?.className)}>
                                   <div className="source-label">{currentSourceLabel}</div>
                                   <div className="source-pills">
                                     {message.sources.map((source, index) => (
@@ -1564,7 +1681,7 @@ function App() {
                               ) : null}
                               {message.action ? (
                                 <div className="action-row">
-                                  <button className="cta-button" type="button">
+                                  <button className={classNames('cta-button', currentCta?.className)} type="button">
                                     {currentCtaLabel || message.action}
                                   </button>
                                   <button className="ghost-button subtle" type="button">
@@ -1586,7 +1703,7 @@ function App() {
                       ) : null}
                     </div>
 
-                    <div className={classNames('composer', 'widget-input')}>
+                    <div className={classNames('composer', 'widget-input', currentInputBar?.className)}>
                       <input
                         value={composer}
                         onChange={(event) => setComposer(event.target.value)}
@@ -1597,8 +1714,10 @@ function App() {
                         }}
                         placeholder={locale === 'ar' ? 'اكتب سؤالك...' : 'Ask a question about this site...'}
                       />
-                      <button className="send-button" onClick={runTest} type="button">
-                        {locale === 'ar' ? 'إرسال' : 'Send'}
+                      <button className={classNames('send-button', currentSendButton?.className)} onClick={runTest} type="button">
+                        {['send-filled', 'send-outline', 'send-lift', 'send-glow', 'send-ghost', 'send-rail', 'send-premium'].includes(config.sendButton)
+                          ? locale === 'ar' ? 'إرسال' : 'Send'
+                          : currentSendButton?.preview ?? (locale === 'ar' ? 'إرسال' : 'Send')}
                       </button>
                     </div>
 
