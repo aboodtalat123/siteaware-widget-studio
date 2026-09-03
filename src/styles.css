@@ -3173,6 +3173,63 @@ body {
   font-size: 0.65rem;
 }
 
+/* Visual-language previews: distinct cues without copying another product's UI. */
+.template-copilot-dock .experience-template-visual {
+  border-left: 4px solid #4b83e8;
+  border-radius: 8px 16px 16px 8px;
+  background: linear-gradient(135deg, #eef5ff, #f7f9fc 56%, #dfeaff);
+}
+
+.template-copilot-dock .template-user-line,
+.template-copilot-dock .template-input-line b {
+  background: #4b83e8;
+}
+
+.template-claude-editorial .experience-template-visual {
+  border: 1px solid #e7d6c9;
+  background: linear-gradient(145deg, #fffaf5, #f4e9df);
+}
+
+.template-claude-editorial .template-answer-line {
+  background: #d7b8a5;
+}
+
+.template-claude-editorial .template-user-line,
+.template-claude-editorial .template-input-line b {
+  background: #b35c37;
+}
+
+.template-chatgpt-minimal .experience-template-visual {
+  border: 1px solid #dfdfdf;
+  background: #ffffff;
+}
+
+.template-chatgpt-minimal .template-window-top i {
+  background: #b8b8b8;
+}
+
+.template-chatgpt-minimal .template-answer-line {
+  background: #d8d8d8;
+}
+
+.template-chatgpt-minimal .template-user-line,
+.template-chatgpt-minimal .template-input-line b {
+  background: #1f1f1f;
+}
+
+.template-gemini-glass .experience-template-visual {
+  border: 1px solid #d4e1fb;
+  background:
+    radial-gradient(circle at 86% 12%, rgb(66 133 244 / 25%), transparent 30%),
+    radial-gradient(circle at 13% 86%, rgb(52 168 83 / 17%), transparent 28%),
+    linear-gradient(135deg, #fafcff, #eaf2ff 55%, #fff4dd);
+}
+
+.template-gemini-glass .template-user-line,
+.template-gemini-glass .template-input-line b {
+  background: linear-gradient(135deg, #4285f4, #8ab4f8);
+}
+
 .experience-template-copy {
   display: grid;
   gap: 4px;

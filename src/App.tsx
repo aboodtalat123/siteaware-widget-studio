@@ -815,7 +815,7 @@ function App() {
   }
 
   async function runTest() {
-    if (!composer.trim()) {
+    if (!composer.trim() || isTyping) {
       return;
     }
 
@@ -838,6 +838,8 @@ function App() {
     };
 
     setConversation((previous) => [...previous, userMessage, loadingMessage]);
+    // Keep the composer ready for the next question while Gemini is replying.
+    setComposer('');
     setWidgetOpen(true);
     setIsTyping(true);
     setStatus('loading');
@@ -852,7 +854,8 @@ function App() {
           body: JSON.stringify({
             locale,
             site: currentSite,
-            conversation: [...conversation, userMessage].slice(-10),
+            // A smaller recent context keeps everyday replies responsive.
+            conversation: [...conversation, userMessage].slice(-6),
             composer: userInput,
             config,
           }),
@@ -1090,8 +1093,8 @@ function App() {
   const apiStatusLabel =
     apiHealth?.mode === 'ready'
       ? locale === 'ar'
-        ? `Gemini متصل · ${apiHealth.model}`
-        : `Gemini connected · ${apiHealth.model}`
+        ? 'Gemini متصل'
+        : 'Gemini connected'
       : apiHealth?.mode === 'missing_key'
         ? locale === 'ar'
           ? 'Gemini غير متصل · أضف GEMINI_API_KEY'
@@ -1324,7 +1327,7 @@ function App() {
                     return (
                       <button
                         key={preset.id}
-                        className={classNames('experience-template-card', isActive && 'active')}
+                        className={classNames('experience-template-card', `template-${preset.id}`, isActive && 'active')}
                         onClick={() => applyPreset(preset.id)}
                         style={{ ['--template-accent' as string]: presetTheme?.tokens.primary ?? config.appearance.primaryColor }}
                         type="button"
@@ -1714,7 +1717,13 @@ function App() {
                         }}
                         placeholder={locale === 'ar' ? 'اكتب سؤالك...' : 'Ask a question about this site...'}
                       />
-                      <button className={classNames('send-button', currentSendButton?.className)} onClick={runTest} type="button">
+                      <button
+                        className={classNames('send-button', currentSendButton?.className)}
+                        onClick={runTest}
+                        type="button"
+                        disabled={isTyping || !composer.trim()}
+                        aria-label={locale === 'ar' ? 'إرسال السؤال' : 'Send question'}
+                      >
                         {['send-filled', 'send-outline', 'send-lift', 'send-glow', 'send-ghost', 'send-rail', 'send-premium'].includes(config.sendButton)
                           ? locale === 'ar' ? 'إرسال' : 'Send'
                           : currentSendButton?.preview ?? (locale === 'ar' ? 'إرسال' : 'Send')}
