@@ -1329,7 +1329,7 @@ function App() {
                         key={preset.id}
                         className={classNames('experience-template-card', `template-${preset.id}`, isActive && 'active')}
                         onClick={() => applyPreset(preset.id)}
-                        style={{ ['--template-accent' as string]: presetTheme?.tokens.primary ?? config.appearance.primaryColor }}
+                        style={{ ['--template-accent' as string]: preset.config.appearance.primaryColor ?? presetTheme?.tokens.primary }}
                         type="button"
                       >
                         <span className="experience-template-visual" aria-hidden="true">

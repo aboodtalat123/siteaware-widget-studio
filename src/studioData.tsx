@@ -639,6 +639,7 @@ export const launcherVariants: VariantItem[] = [
 ];
 
 export const chatShellVariants: VariantItem[] = [
+  { id: 'liquid-glass', label: 'Liquid Glass', note: 'Clear layered glass with readable content', keywords: ['apple', 'glass', 'transparent'], preview: <span>Glass</span>, className: 'shell-liquid-glass' },
   { id: 'classic', label: 'Classic', note: 'Traditional assistant window', keywords: ['classic'], preview: <span>Classic</span>, className: 'shell-classic' },
   { id: 'modern-saas', label: 'Modern SaaS', note: 'Dashboard friendly shell', keywords: ['saas', 'modern'], preview: <span>SaaS</span>, className: 'shell-modern-saas' },
   { id: 'minimal', label: 'Minimal', note: 'No-frills shell', keywords: ['minimal'], preview: <span>Minimal</span>, className: 'shell-minimal' },
@@ -752,6 +753,22 @@ export const takeMeThereVariants: VariantItem[] = [
 ];
 
 export const presetDefinitions: PresetDefinition[] = [
+  {
+    id: 'apple-liquid-glass',
+    label: 'Apple Liquid Glass',
+    note: 'Translucent controls, soft reflections, clear answers',
+    config: {
+      assistantIcon: 'halo-07', launcher: 'glass-launcher', chatShell: 'liquid-glass',
+      header: 'header-minimal', assistantMessage: 'flat-text', userMessage: 'glass',
+      inputBar: 'glass-composer', sendButton: 'send-circle', sourceCitation: 'source-footer',
+      takeMeThere: 'cta-link', theme: 'neutral-light',
+      appearance: {
+        radius: 'xl', widgetWidth: 420, widgetHeight: 660, density: 'comfortable',
+        fontScale: 1, shadowStrength: 0.35, launcherSize: 'md',
+        launcherPosition: 'bottom-right', primaryColor: '#303842',
+      },
+    },
+  },
   {
     id: 'apple-calm',
     label: 'Apple Calm',
