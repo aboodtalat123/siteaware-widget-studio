@@ -145,6 +145,14 @@
         padding: 4px;
         background: #fff;
       }
+      input[type="text"] {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 9px;
+        background: #fff;
+        color: var(--text);
+      }
       input[type="range"] { width: 100%; }
       select {
         width: 100%;
@@ -246,6 +254,11 @@
         <div class="section-head"><strong>Preview</strong><span class="hint">Live on page</span></div>
         <div class="switch-row"><span>Open chat</span><input id="openToggle" type="checkbox" /></div>
         <div class="switch-row"><span>RTL</span><input id="dirToggle" type="checkbox" /></div>
+      </section>
+
+      <section class="section">
+        <div class="section-head"><strong>Brand</strong><span class="hint">Official identity</span></div>
+        <label>Assistant name<input id="assistantName" type="text" maxlength="48" /></label>
       </section>
 
       <section class="section">

@@ -144,7 +144,7 @@ function renderStatus() {
   $('permissionStatus').textContent = canInject(state.tabUrl) ? t('جاهز', 'Ready') : t('غير مدعوم', 'Blocked');
   $('backendStatus').textContent = state.backendReady ? 'Gemini ready' : 'Rule match';
   $('directionStatus').textContent = state.profile?.direction?.toUpperCase() || state.config.direction.toUpperCase();
-  $('themeStatus').textContent = state.profile?.themeMode || (state.config.appearance.backgroundColor === '#ffffff' ? 'light' : 'custom');
+  $('themeStatus').textContent = state.profile?.mode || (state.config.appearance.backgroundColor === '#ffffff' ? 'light' : 'custom');
 }
 
 function renderChoices(containerId, items, current, setter, type) {
@@ -168,6 +168,7 @@ function renderControls() {
   document.documentElement.lang = config.locale;
   document.documentElement.dir = config.locale === 'ar' ? 'rtl' : 'ltr';
   $('languageToggle').textContent = config.locale === 'ar' ? 'EN' : 'AR';
+  $('assistantName').value = config.assistantName || 'SiteAware';
   $('openToggle').checked = config.previewOpen;
   $('dirToggle').checked = config.direction === 'rtl';
   $('primaryColor').value = toHex(config.appearance.primaryColor, '#2563eb');
@@ -194,14 +195,26 @@ function renderProfile() {
     box.innerHTML = `<p>${t('افحص الموقع لاستخراج الألوان والخطوط والحواف بأمان.', 'Scan the site to extract safe colors, fonts, and radius.')}</p>`;
     return;
   }
+  const primary = profile.palette?.primary;
+  const background = profile.palette?.background;
+  const surface = profile.palette?.surface;
+  const border = profile.palette?.border;
+  const textColor = profile.palette?.foreground;
+  const confidence = Math.round((profile.confidence?.overall || 0) * 100);
   box.innerHTML = `
     <div class="profile-grid">
       <span>${t('الاتجاه', 'Direction')}<b>${profile.direction}</b></span>
-      <span>${t('النمط', 'Theme')}<b>${profile.themeMode}</b></span>
-      <span>${t('الرئيسي', 'Primary')}<b><i style="background:${profile.primary}"></i>${profile.primary}</b></span>
-      <span>${t('الخلفية', 'Background')}<b><i style="background:${profile.background}"></i>${profile.background}</b></span>
-      <span>${t('الحواف', 'Radius')}<b>${profile.radius}px</b></span>
-      <span>${t('العينات', 'Samples')}<b>${profile.evidenceCounts?.sampledElements || 0}</b></span>
+      <span>${t('النمط', 'Theme')}<b>${profile.mode}</b></span>
+      <span>${t('الرئيسي', 'Primary')}<b><i style="background:${primary?.value}"></i>${primary?.value || 'n/a'} · ${Math.round((primary?.confidence || 0) * 100)}%</b></span>
+      <span>${t('الخلفية', 'Background')}<b><i style="background:${background?.value}"></i>${background?.value || 'n/a'}</b></span>
+      <span>${t('السطح', 'Surface')}<b><i style="background:${surface?.value}"></i>${surface?.value || 'n/a'}</b></span>
+      <span>${t('النص', 'Text')}<b><i style="background:${textColor?.value}"></i>${textColor?.value || 'n/a'}</b></span>
+      <span>${t('الحدود', 'Border')}<b><i style="background:${border?.value}"></i>${border?.value || 'n/a'}</b></span>
+      <span>${t('الخط', 'Font')}<b>${profile.typography?.fontFamily || 'n/a'}</b></span>
+      <span>${t('الحواف', 'Radius')}<b>${profile.shape?.radius || 0}px · ${profile.shape?.language || 'n/a'}</b></span>
+      <span>${t('الظل', 'Shadow')}<b>${profile.effects?.shadowStyle || 'none'}</b></span>
+      <span>${t('الثقة', 'Confidence')}<b>${confidence}%</b></span>
+      <span>${t('العينات', 'Samples')}<b>${profile.evidence?.visibleElementsSampled || 0} / vars ${profile.evidence?.cssVariablesUsed || 0}</b></span>
     </div>
   `;
 }
@@ -276,6 +289,7 @@ async function resetThisSite() {
 
 function bind() {
   $('languageToggle').addEventListener('click', () => setConfig({ locale: state.config.locale === 'ar' ? 'en' : 'ar' }));
+  $('assistantName').addEventListener('input', (event) => setConfig({ assistantName: event.target.value }));
   $('openToggle').addEventListener('change', (event) => setConfig({ previewOpen: event.target.checked }));
   $('dirToggle').addEventListener('change', (event) => setConfig({ direction: event.target.checked ? 'rtl' : 'ltr' }));
   $('primaryColor').addEventListener('input', (event) => setConfig({ appearance: { primaryColor: event.target.value } }));

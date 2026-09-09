@@ -9,6 +9,7 @@
     "dev:server": "node server.mjs",
     "build": "tsc -b && vite build && npm run build:extension",
     "build:extension": "node scripts/build-extension.mjs",
+    "test:extension": "node --test tests/extension/*.test.mjs",
     "preview": "vite preview",
     "start": "node server.mjs"
   },

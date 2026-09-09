@@ -3,9 +3,10 @@ export const defaultWidgetConfig = {
   locale: 'ar',
   direction: 'rtl',
   previewOpen: true,
-  assistantIcon: 'spark-02',
-  launcher: 'glass-launcher',
-  chatShell: 'copilot-dock',
+  assistantName: 'SiteAware',
+  assistantIcon: 'siteaware-official',
+  launcher: 'minimal-floating',
+  chatShell: 'minimal-saas',
   header: 'minimal',
   assistantMessage: 'clean-card',
   userMessage: 'solid',
@@ -25,35 +26,46 @@ export const defaultWidgetConfig = {
     widgetHeight: 680,
     shadowStrength: 0.38,
     launcherSize: 'md',
-    launcherPosition: 'bottom-right',
+    launcherPosition: 'bottom-left',
   },
 };
 
 export const catalog = {
   icons: [
-    { id: 'spark-02', label: 'Spark', glyph: '✦' },
-    { id: 'orb-01', label: 'Orb', glyph: '●' },
-    { id: 'halo-07', label: 'Halo', glyph: '◎' },
-    { id: 'bot-06', label: 'Bot', glyph: 'AI' },
-    { id: 'shield-15', label: 'Shield', glyph: '◆' },
-    { id: 'sphere-16', label: 'Sphere', glyph: '◉' },
-    { id: 'glyph-19', label: 'Glyph', glyph: '✧' },
-    { id: 'premium-20', label: 'Premium', glyph: 'S' },
+    { id: 'siteaware-official', label: 'Official', glyph: 'SA', featured: true },
+    { id: 'siteaware-glass', label: 'Glass Mark', glyph: 'S', featured: true },
+    { id: 'siteaware-minimal', label: 'Minimal', glyph: 'S', featured: true },
+    { id: 'siteaware-soft', label: 'Soft', glyph: '◎', featured: true },
+    { id: 'siteaware-dark', label: 'Dark', glyph: 'SA', featured: true },
+    { id: 'spark-02', label: 'Alt Spark', glyph: '✦' },
+    { id: 'orb-01', label: 'Alt Orb', glyph: '●' },
+    { id: 'shield-15', label: 'Alt Shield', glyph: '◆' },
   ],
   launchers: [
-    { id: 'circle-icon', label: 'Circle' },
-    { id: 'glass-launcher', label: 'Glass' },
-    { id: 'floating-orb', label: 'Orb' },
-    { id: 'pill-label', label: 'Pill' },
+    { id: 'minimal-floating', label: 'Minimal Floating', featured: true },
+    { id: 'soft-glass', label: 'Soft Glass', featured: true },
+    { id: 'liquid-launcher', label: 'Liquid Glass', featured: true },
+    { id: 'compact-pill', label: 'Compact Pill', featured: true },
+    { id: 'ai-orb', label: 'AI Orb', featured: true },
+    { id: 'docked-tab', label: 'Docked Tab', featured: true },
+    { id: 'circle-icon', label: 'Classic Circle' },
+    { id: 'glass-launcher', label: 'Classic Glass' },
+    { id: 'floating-orb', label: 'Classic Orb' },
+    { id: 'pill-label', label: 'Classic Pill' },
     { id: 'minimal-outline', label: 'Outline' },
     { id: 'vertical-edge-tab', label: 'Edge Tab' },
   ],
   chatShells: [
-    { id: 'copilot-dock', label: 'Copilot Dock' },
-    { id: 'liquid-glass', label: 'Apple Glass' },
-    { id: 'chatgpt-minimal', label: 'ChatGPT' },
-    { id: 'claude-editorial', label: 'Claude' },
-    { id: 'gemini-glow', label: 'Gemini' },
+    { id: 'minimal-saas', label: 'Minimal SaaS', featured: true },
+    { id: 'soft-glass-shell', label: 'Soft Glass', featured: true },
+    { id: 'liquid-glass', label: 'Liquid Glass', featured: true },
+    { id: 'native-card', label: 'Native Card', featured: true },
+    { id: 'compact-copilot', label: 'Compact Copilot', featured: true },
+    { id: 'premium-dark', label: 'Premium Dark', featured: true },
+    { id: 'copilot-dock', label: 'Classic Copilot' },
+    { id: 'chatgpt-minimal', label: 'ChatGPT Inspired' },
+    { id: 'claude-editorial', label: 'Claude Inspired' },
+    { id: 'gemini-glow', label: 'Gemini Inspired' },
     { id: 'enterprise-panel', label: 'Enterprise' },
   ],
   messageStyles: [
@@ -96,6 +108,7 @@ export function sanitizeWidgetConfig(input = {}) {
 
   next.locale = next.locale === 'en' ? 'en' : 'ar';
   next.direction = next.direction === 'ltr' ? 'ltr' : 'rtl';
+  next.assistantName = String(next.assistantName || base.assistantName).trim().slice(0, 48) || base.assistantName;
   next.previewOpen = Boolean(next.previewOpen);
   next.appearance = {
     ...appearance,
@@ -119,25 +132,26 @@ export function sanitizeWidgetConfig(input = {}) {
 
 export function configFromDesignProfile(profile = {}) {
   const base = structuredClone(defaultWidgetConfig);
-  const primary = profile.primary || profile.brandColors?.[0] || base.appearance.primaryColor;
-  const isDark = profile.themeMode === 'dark';
+  const palette = profile.palette || {};
+  const primary = palette.primary?.value || profile.primary || profile.brandColors?.[0] || base.appearance.primaryColor;
+  const isDark = profile.mode === 'dark' || profile.themeMode === 'dark';
   return sanitizeWidgetConfig({
     ...base,
     direction: profile.direction === 'ltr' ? 'ltr' : 'rtl',
-    chatShell: isDark ? 'gemini-glow' : 'liquid-glass',
-    launcher: isDark ? 'floating-orb' : 'glass-launcher',
+    chatShell: isDark ? 'premium-dark' : 'minimal-saas',
+    launcher: isDark ? 'ai-orb' : 'minimal-floating',
     assistantMessage: isDark ? 'glass' : 'clean-card',
     inputBar: isDark ? 'glass' : 'pill',
     appearance: {
       ...base.appearance,
       primaryColor: primary,
-      surfaceColor: profile.surface || (isDark ? '#101827' : '#ffffff'),
-      backgroundColor: profile.background || (isDark ? '#0b1020' : '#f8fafc'),
-      textColor: profile.text || (isDark ? '#f8fafc' : '#111827'),
-      mutedTextColor: profile.mutedText || (isDark ? '#a6b1c2' : '#667085'),
-      borderColor: profile.border || (isDark ? '#263244' : '#dde3eb'),
-      radius: profile.radius >= 22 ? 'xl' : profile.radius >= 14 ? 'lg' : profile.radius >= 8 ? 'md' : 'sm',
-      launcherPosition: 'bottom-right',
+      surfaceColor: palette.surface?.value || profile.surface || (isDark ? '#101827' : '#ffffff'),
+      backgroundColor: palette.background?.value || profile.background || (isDark ? '#0b1020' : '#f8fafc'),
+      textColor: palette.foreground?.value || profile.text || (isDark ? '#f8fafc' : '#111827'),
+      mutedTextColor: palette.muted?.value || profile.mutedText || (isDark ? '#a6b1c2' : '#667085'),
+      borderColor: palette.border?.value || profile.border || (isDark ? '#263244' : '#dde3eb'),
+      radius: (profile.shape?.radius || profile.radius) >= 22 ? 'xl' : (profile.shape?.radius || profile.radius) >= 14 ? 'lg' : (profile.shape?.radius || profile.radius) >= 8 ? 'md' : 'sm',
+      launcherPosition: 'bottom-left',
     },
   });
 }

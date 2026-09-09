@@ -5,6 +5,7 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
   const ROOT_CLASS = 'siteaware-live-preview';
 
   const catalogPromise = import(chrome.runtime.getURL('shared/widget-catalog.js'));
+  const analyzerPromise = import(chrome.runtime.getURL('shared/site-design-analyzer.js'));
 
   const state = {
     host: null,
@@ -12,6 +13,8 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
     config: null,
     messages: [],
     inputValue: '',
+    sending: false,
+    lastError: '',
     routeKey: location.href,
     observer: null,
     routeTimer: null,
@@ -113,6 +116,7 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
 
     const a = config.appearance;
     const glyph = launcherGlyph(config, catalog);
+    const name = config.assistantName || 'SiteAware';
     const radiusPx = { sm: 10, md: 14, lg: 20, xl: 26 }[a.radius] || 20;
     const launcherSize = { sm: 46, md: 58, lg: 70 }[a.launcherSize] || 58;
     const shadowOpacity = Math.round(a.shadowStrength * 34) / 100;
@@ -122,7 +126,7 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
     const messagesMarkup = state.messages.map((message) => `
       <div class="message-row ${message.role}">
         <div class="bubble ${message.role === 'assistant' ? config.assistantMessage : config.userMessage}">
-          <span class="meta">${message.role === 'assistant' ? 'SiteAware' : text(locale, 'أنت', 'You')}</span>
+          <span class="meta">${message.role === 'assistant' ? escapeHtml(name) : text(locale, 'أنت', 'You')}</span>
           <p>${escapeHtml(message.text)}</p>
         </div>
       </div>
@@ -142,19 +146,20 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
         .launcher {
           width: ${launcherSize}px;
           height: ${launcherSize}px;
-          border: 1px solid color-mix(in srgb, ${a.primaryColor} 28%, ${a.borderColor});
-          border-radius: ${config.launcher === 'vertical-edge-tab' ? '18px' : '999px'};
+          border: 1px solid color-mix(in srgb, ${a.primaryColor} 24%, ${a.borderColor});
+          border-radius: ${['vertical-edge-tab', 'docked-tab'].includes(config.launcher) ? '18px' : '999px'};
           display: ${config.previewOpen ? 'none' : 'grid'};
           place-items: center;
           gap: 6px;
           background: ${launcherBackground(config.launcher, a)};
           color: ${a.textColor};
-          box-shadow: 0 16px 42px rgb(15 23 42 / ${shadowOpacity});
+          box-shadow: 0 14px 36px rgb(15 23 42 / ${shadowOpacity});
           cursor: pointer;
           padding: 0;
           min-width: ${config.launcher === 'pill-label' ? '126px' : `${launcherSize}px`};
         }
-        .launcher.vertical-edge-tab {
+        .launcher.vertical-edge-tab,
+        .launcher.docked-tab {
           width: 44px;
           height: 132px;
           writing-mode: vertical-rl;
@@ -180,7 +185,7 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
           background: ${shellBackground(config.chatShell, a)};
           color: ${a.textColor};
           box-shadow: 0 22px 72px rgb(15 23 42 / ${shadowOpacity});
-          backdrop-filter: ${config.chatShell === 'liquid-glass' ? 'blur(26px) saturate(1.18)' : 'none'};
+          backdrop-filter: ${['liquid-glass', 'soft-glass-shell'].includes(config.chatShell) ? 'blur(26px) saturate(1.18)' : 'none'};
         }
         .header {
           display: flex;
@@ -207,7 +212,7 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
           background: ${a.primaryColor};
           color: #fff;
           font-weight: 800;
-          box-shadow: 0 10px 30px color-mix(in srgb, ${a.primaryColor} 26%, transparent);
+          box-shadow: 0 10px 26px color-mix(in srgb, ${a.primaryColor} 22%, transparent);
         }
         .copy strong, .copy span { display: block; }
         .copy strong { font-size: 14px; line-height: 1.2; }
@@ -227,7 +232,7 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
           gap: 12px;
           overflow: auto;
           padding: 16px;
-          background: ${config.chatShell === 'chatgpt-minimal' ? a.surfaceColor : 'transparent'};
+          background: ${['chatgpt-minimal', 'minimal-saas', 'native-card'].includes(config.chatShell) ? a.surfaceColor : 'transparent'};
         }
         .message-row { display: flex; }
         .message-row.user { justify-content: flex-end; }
@@ -305,6 +310,40 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
           cursor: pointer;
           font-weight: 800;
         }
+        .send:disabled {
+          cursor: default;
+          opacity: .48;
+        }
+        .typing {
+          display: ${state.sending ? 'inline-flex' : 'none'};
+          align-items: center;
+          gap: 4px;
+          width: max-content;
+          margin-inline-start: 16px;
+          margin-bottom: 10px;
+          padding: 8px 10px;
+          border-radius: 999px;
+          background: ${a.surfaceColor};
+          color: ${a.mutedTextColor};
+          border: 1px solid ${a.borderColor};
+          font-size: 11px;
+        }
+        .typing i {
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: currentColor;
+          animation: pulse 900ms infinite ease-in-out;
+        }
+        .typing i:nth-child(2) { animation-delay: 140ms; }
+        .typing i:nth-child(3) { animation-delay: 280ms; }
+        .error {
+          display: ${state.lastError ? 'block' : 'none'};
+          margin: 0 16px 10px;
+          color: #b42318;
+          font-size: 11px;
+        }
+        @keyframes pulse { 0%, 100% { opacity: .28; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
       </style>
       <div class="${ROOT_CLASS} shell-${cssEscape(config.chatShell)}" dir="${dir}">
         <button class="launcher ${cssEscape(config.launcher)}" type="button" data-action="open">
@@ -316,16 +355,18 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
             <div class="brand">
               <div class="mark">${escapeHtml(glyph)}</div>
               <div class="copy">
-                <strong>${text(locale, 'مساعد SiteAware', 'SiteAware Assistant')}</strong>
-                <span>${text(locale, 'معاينة تصميم مباشرة', 'Live design preview')}</span>
+                <strong>${escapeHtml(name)}</strong>
+                <span>${text(locale, 'مساعد معاينة رسمي', 'Official preview assistant')}</span>
               </div>
             </div>
             <button class="icon-btn" type="button" data-action="close">×</button>
           </header>
           <main class="messages" aria-live="polite">${messagesMarkup}</main>
+          <div class="typing"><i></i><i></i><i></i><span>${text(locale, 'يكتب...', 'Thinking...')}</span></div>
+          <p class="error">${escapeHtml(state.lastError)}</p>
           <form class="composer">
             <input value="${escapeHtml(state.inputValue)}" placeholder="${text(locale, 'اكتب سؤال معاينة...', 'Ask a preview question...')}" />
-            <button class="send" type="submit">${config.sendButton === 'text' ? text(locale, 'إرسال', 'Send') : '➜'}</button>
+            <button class="send" type="submit" ${state.sending ? 'disabled' : ''}>${config.sendButton === 'text' ? text(locale, 'إرسال', 'Send') : '➜'}</button>
           </form>
         </section>
       </div>
@@ -337,37 +378,51 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
     });
     shadow.querySelector('[data-action="open"]')?.addEventListener('click', () => renderWidget({ previewOpen: true }));
     shadow.querySelector('[data-action="close"]')?.addEventListener('click', () => renderWidget({ previewOpen: false }));
-    shadow.querySelector('form')?.addEventListener('submit', (event) => {
+    shadow.querySelector('form')?.addEventListener('submit', async (event) => {
       event.preventDefault();
       const question = state.inputValue.trim();
       if (!question) return;
       state.messages.push({ role: 'user', text: question });
       state.inputValue = '';
-      state.messages.push({
-        role: 'assistant',
-        text: text(locale, 'هذه إجابة معاينة للتصميم. في مرحلة لاحقة يتم ربط مساعد SiteAware الحقيقي.', 'This is a design-preview reply. The real SiteAware assistant connects in a later milestone.'),
-      });
+      state.sending = true;
+      state.lastError = '';
       renderWidget({ previewOpen: true });
+      try {
+        const response = await requestPreviewReply(question, config);
+        state.messages.push({
+          role: 'assistant',
+          text: response || text(locale, 'أنا جاهز لمعاينة التصميم والإجابة العامة بدون قراءة بيانات الصفحة الخاصة.', 'I can preview the design and answer general questions without reading private page data.'),
+        });
+      } catch (error) {
+        state.lastError = text(locale, 'تعذر الاتصال بالمساعد الآن. أبقيت المحادثة كمعاينة تصميم.', 'Assistant connection failed. The conversation remains in design preview mode.');
+        state.messages.push({
+          role: 'assistant',
+          text: text(locale, 'الاتصال بالذكاء غير متاح الآن، لكن تغييرات التصميم ستبقى مباشرة على الصفحة.', 'AI is unavailable right now, but design changes still update live on the page.'),
+        });
+      } finally {
+        state.sending = false;
+        renderWidget({ previewOpen: true });
+      }
     });
   }
 
   function launcherBackground(launcher, a) {
-    if (launcher === 'glass-launcher') return `color-mix(in srgb, ${a.surfaceColor} 72%, transparent)`;
-    if (launcher === 'floating-orb') return `radial-gradient(circle at 30% 20%, #fff, ${a.primaryColor})`;
-    if (launcher === 'minimal-outline') return a.surfaceColor;
+    if (['glass-launcher', 'soft-glass', 'liquid-launcher'].includes(launcher)) return `color-mix(in srgb, ${a.surfaceColor} 76%, transparent)`;
+    if (['floating-orb', 'ai-orb'].includes(launcher)) return `radial-gradient(circle at 30% 20%, #fff, ${a.primaryColor})`;
+    if (['minimal-outline', 'minimal-floating'].includes(launcher)) return a.surfaceColor;
     return `linear-gradient(135deg, ${a.surfaceColor}, color-mix(in srgb, ${a.primaryColor} 12%, ${a.surfaceColor}))`;
   }
 
   function shellBackground(shell, a) {
-    if (shell === 'liquid-glass') return `linear-gradient(145deg, color-mix(in srgb, ${a.surfaceColor} 72%, transparent), color-mix(in srgb, ${a.backgroundColor} 62%, transparent))`;
-    if (shell === 'gemini-glow') return `radial-gradient(circle at 18% 0%, color-mix(in srgb, ${a.primaryColor} 34%, transparent), transparent 38%), ${a.backgroundColor}`;
+    if (['liquid-glass', 'soft-glass-shell'].includes(shell)) return `linear-gradient(145deg, color-mix(in srgb, ${a.surfaceColor} 78%, transparent), color-mix(in srgb, ${a.backgroundColor} 68%, transparent))`;
+    if (['gemini-glow', 'premium-dark'].includes(shell)) return `radial-gradient(circle at 18% 0%, color-mix(in srgb, ${a.primaryColor} 24%, transparent), transparent 38%), ${a.backgroundColor}`;
     if (shell === 'claude-editorial') return `linear-gradient(180deg, ${a.surfaceColor}, color-mix(in srgb, ${a.surfaceColor} 90%, #f4efe8))`;
     return a.backgroundColor;
   }
 
   function headerBackground(shell, a) {
-    if (shell === 'copilot-dock') return `linear-gradient(135deg, ${a.primaryColor}, color-mix(in srgb, ${a.primaryColor} 72%, #111827))`;
-    if (shell === 'chatgpt-minimal') return a.surfaceColor;
+    if (['copilot-dock', 'compact-copilot'].includes(shell)) return `linear-gradient(135deg, ${a.primaryColor}, color-mix(in srgb, ${a.primaryColor} 72%, #111827))`;
+    if (['chatgpt-minimal', 'minimal-saas', 'native-card'].includes(shell)) return a.surfaceColor;
     return `color-mix(in srgb, ${a.surfaceColor} 84%, transparent)`;
   }
 
@@ -385,110 +440,25 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
       .replace(/'/g, '&#39;');
   }
 
-  function normalizeColor(value) {
-    const text = String(value || '').trim();
-    if (!text || /transparent|rgba\(0,\s*0,\s*0,\s*0\)/i.test(text)) return '';
-    return text;
-  }
-
-  function scanPageStyle() {
-    const root = document.documentElement;
-    const body = document.body || root;
-    const sampleSelectors = [
-      'header', 'nav', 'main', 'section', 'article', 'aside', 'footer',
-      'button', 'a', 'input', 'select', 'textarea', '[role="button"]',
-      '.card', '[class*="card"]', '[class*="panel"]', '[class*="nav"]',
-    ];
-    const samples = [root, body, ...document.querySelectorAll(sampleSelectors.join(','))]
-      .filter((element) => element instanceof HTMLElement)
-      .filter((element) => {
-        const rect = element.getBoundingClientRect();
-        const style = getComputedStyle(element);
-        return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
-      })
-      .slice(0, 90);
-
-    const colors = new Map();
-    const fonts = new Map();
-    const radii = [];
-    const shadows = [];
-    const direction = root.dir || body.dir || getComputedStyle(body).direction || 'ltr';
-    const bodyStyle = getComputedStyle(body);
-
-    for (const element of samples) {
-      const style = getComputedStyle(element);
-      [
-        style.color,
-        style.backgroundColor,
-        style.borderTopColor,
-        style.borderRightColor,
-        style.borderBottomColor,
-        style.borderLeftColor,
-      ].map(normalizeColor).filter(Boolean).forEach((color) => {
-        colors.set(color, (colors.get(color) || 0) + 1);
-      });
-      if (style.fontFamily) fonts.set(style.fontFamily, (fonts.get(style.fontFamily) || 0) + 1);
-      const radius = Number.parseFloat(style.borderRadius || '0');
-      if (Number.isFinite(radius) && radius > 0) radii.push(radius);
-      if (style.boxShadow && style.boxShadow !== 'none' && shadows.length < 4) shadows.push(style.boxShadow);
+  async function requestPreviewReply(question, config) {
+    const response = await chrome.runtime.sendMessage({
+      type: 'SITEAWARE_PREVIEW_CHAT',
+      payload: {
+        locale: config.locale,
+        site: { name: location.hostname, vibe: 'design preview' },
+        config: {
+          assistantIcon: config.assistantIcon,
+          launcher: config.launcher,
+          chatShell: config.chatShell,
+        },
+        conversation: state.messages.slice(-8),
+        composer: question,
+      },
+    });
+    if (!response?.ok) {
+      throw new Error(response?.message || 'Preview assistant unavailable');
     }
-
-    const rankedColors = [...colors.entries()].sort((a, b) => b[1] - a[1]).map(([color]) => color);
-    const rankedFonts = [...fonts.entries()].sort((a, b) => b[1] - a[1]).map(([font]) => font);
-    const background = normalizeColor(bodyStyle.backgroundColor) || normalizeColor(getComputedStyle(root).backgroundColor) || '#ffffff';
-    const averageRadius = radii.length ? Math.round(radii.reduce((sum, value) => sum + value, 0) / radii.length) : 12;
-
-    return {
-      source: {
-        hostname: location.hostname,
-        origin: location.origin,
-      },
-      direction: direction === 'rtl' ? 'rtl' : 'ltr',
-      themeMode: isDarkColor(background) ? 'dark' : 'light',
-      background,
-      surface: rankedColors.find((color) => color !== background) || '#ffffff',
-      text: rankedColors[0] || '#111827',
-      mutedText: rankedColors[2] || '#667085',
-      border: rankedColors[3] || '#d8dee9',
-      primary: rankedColors.find((color) => !isGrayish(color) && !isTooLightOrDark(color)) || '#2563eb',
-      brandColors: rankedColors.filter((color) => !isGrayish(color)).slice(0, 5),
-      fontFamilies: rankedFonts.slice(0, 4),
-      radius: averageRadius,
-      shadows,
-      evidenceCounts: {
-        sampledElements: samples.length,
-        colors: rankedColors.length,
-        fonts: rankedFonts.length,
-        radii: radii.length,
-      },
-    };
-  }
-
-  function parseRgb(value) {
-    const match = String(value).match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
-    if (!match) return null;
-    return { r: Number(match[1]), g: Number(match[2]), b: Number(match[3]) };
-  }
-
-  function luminance(value) {
-    const rgb = parseRgb(value);
-    if (!rgb) return 1;
-    return (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
-  }
-
-  function isDarkColor(value) {
-    return luminance(value) < 0.46;
-  }
-
-  function isGrayish(value) {
-    const rgb = parseRgb(value);
-    if (!rgb) return false;
-    return Math.max(rgb.r, rgb.g, rgb.b) - Math.min(rgb.r, rgb.g, rgb.b) < 24;
-  }
-
-  function isTooLightOrDark(value) {
-    const luma = luminance(value);
-    return luma < 0.06 || luma > 0.94;
+    return response.reply;
   }
 
   function watchRouteChanges() {
@@ -524,12 +494,11 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
       return true;
     }
     if (message?.type === 'SITEAWARE_SCAN_PAGE') {
-      try {
-        const profile = scanPageStyle();
+      analyzerPromise.then(({ scanSiteDesignV2 }) => scanSiteDesignV2(document))
+        .then((profile) => {
         sendResponse?.({ ok: true, profile });
-      } catch (error) {
-        sendResponse?.({ ok: false, error: error.message });
-      }
+        })
+        .catch((error) => sendResponse?.({ ok: false, error: error.message }));
       return true;
     }
     return undefined;
