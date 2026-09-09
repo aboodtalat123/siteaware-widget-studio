@@ -1,18 +1,23 @@
-import { demoProfiles } from './shared/demo-profiles.js';
-import { generateRecommendations } from './shared/theme-engine.js';
+import { catalog, configFromDesignProfile, defaultWidgetConfig, sanitizeWidgetConfig } from './shared/widget-catalog.js';
+
+const BACKEND_URL = 'https://siteaware-widget-studio.onrender.com';
 
 const state = {
   tabId: null,
-  tabTitle: '',
   tabUrl: '',
-  snapshot: null,
-  recommendations: [],
-  target: null,
-  injectedTabs: new Set(),
-  activeProfileId: null,
+  tabTitle: '',
+  originKey: 'global',
+  config: sanitizeWidgetConfig(defaultWidgetConfig),
+  profile: null,
+  injected: false,
+  backendReady: false,
 };
 
 const $ = (id) => document.getElementById(id);
+
+function t(ar, en) {
+  return state.config.locale === 'ar' ? ar : en;
+}
 
 function hostnameFromUrl(url) {
   try {
@@ -22,298 +27,311 @@ function hostnameFromUrl(url) {
   }
 }
 
-function setStatus(text) {
-  $('status').textContent = text;
-}
-
-function renderTabMeta() {
-  const hostname = hostnameFromUrl(state.tabUrl);
-  const title = state.tabTitle || 'Untitled page';
-  $('tabMeta').textContent = state.tabId == null
-    ? 'Open a normal web page and click the extension icon.'
-    : `${title}${hostname ? ` · ${hostname}` : ''}`;
-}
-
-function renderSnapshot(snapshot) {
-  $('snapshot').textContent = JSON.stringify(snapshot || {}, null, 2);
-  const summary = $('summary');
-  summary.innerHTML = '';
-
-  const normalized = snapshot || {};
-  const cards = [
-    ['Mode', normalized.pageMode || 'mixed'],
-    ['Background', normalized.pageBackground || 'n/a'],
-    ['Fonts', (normalized.fontFamilies || []).slice(0, 2).join(', ') || 'n/a'],
-    ['Radii', `buttons ${normalized.buttonRadius ?? 'n/a'} / cards ${normalized.cardRadius ?? 'n/a'} / inputs ${normalized.inputRadius ?? 'n/a'}`],
-    ['Colors', `${(normalized.brandColors || []).length} brand / ${(normalized.accentColors || []).length} accent`],
-    ['Source', normalized.source?.hostname || hostnameFromUrl(state.tabUrl) || 'n/a'],
-  ];
-
-  for (const [label, value] of cards) {
-    const card = document.createElement('div');
-    card.className = 'summary-card';
-    card.innerHTML = `<strong>${label}</strong><span>${value}</span>`;
-    summary.appendChild(card);
+function originFromUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return /^https?:$/.test(parsed.protocol) ? parsed.origin : '';
+  } catch {
+    return '';
   }
 }
 
-function renderRecommendations() {
-  const container = $('recs');
-  container.innerHTML = '';
-  $('recsHint').textContent = state.recommendations.length
-    ? `${state.recommendations.length} deterministic theme options`
-    : 'No recommendations yet.';
-
-  if (!state.recommendations.length) {
-    container.innerHTML = '<p class="empty">Scan the page or load a demo profile to generate themes.</p>';
-    return;
-  }
-
-  for (const rec of state.recommendations) {
-    const card = document.createElement('div');
-    card.className = 'rec-card';
-    const tokens = rec.tokens || {};
-    card.innerHTML = `
-      <div>
-        <strong>${rec.label}</strong>
-        <span>${rec.origin || 'local scan'}</span>
-      </div>
-      <div class="swatches">
-        <span style="background:${tokens.primary || '#7cc8ff'}"></span>
-        <span style="background:${tokens.surface || '#111827'}"></span>
-        <span style="background:${tokens.surfaceSecondary || '#172033'}"></span>
-        <span style="background:${tokens.accent || tokens.primary || '#7cc8ff'}"></span>
-        <span style="background:${tokens.text || '#f8fbff'}"></span>
-      </div>
-      <div class="row">
-        <button class="primary">Apply to widget</button>
-      </div>
-    `;
-    card.querySelector('button').addEventListener('click', async () => {
-      await injectAndSend({
-        type: 'SITEAWARE_RENDER_WIDGET',
-        config: { theme: rec, open: true },
-      });
-      setStatus(`Applied ${rec.label} to the widget.`);
-    });
-    container.appendChild(card);
-  }
-}
-
-function renderProfiles() {
-  const container = $('profiles');
-  container.innerHTML = '';
-  for (const profile of demoProfiles) {
-    const card = document.createElement('div');
-    card.className = 'profile-card';
-    const active = state.activeProfileId === profile.id;
-    card.innerHTML = `
-      <strong>${profile.label}</strong>
-      <span>${profile.note}</span>
-      <div class="preview-actions">
-        <button class="ghost">${active ? 'Loaded' : 'Preview'}</button>
-        <button class="primary">Apply</button>
-      </div>
-    `;
-    const [previewBtn, applyBtn] = card.querySelectorAll('button');
-    previewBtn.addEventListener('click', () => {
-      state.activeProfileId = profile.id;
-      state.snapshot = profile.snapshot;
-      state.recommendations = generateRecommendations(profile.snapshot);
-      renderSnapshot(state.snapshot);
-      renderRecommendations();
-      setStatus(`Loaded demo profile: ${profile.label}.`);
-      $('summaryHint').textContent = `Demo profile: ${profile.label}`;
-      renderProfiles();
-    });
-    applyBtn.addEventListener('click', async () => {
-      state.activeProfileId = profile.id;
-      state.snapshot = profile.snapshot;
-      state.recommendations = generateRecommendations(profile.snapshot);
-      renderSnapshot(state.snapshot);
-      renderRecommendations();
-      renderProfiles();
-      await injectAndSend({
-        type: 'SITEAWARE_RENDER_WIDGET',
-        config: { theme: state.recommendations[0], open: true },
-      });
-      setStatus(`Applied demo profile ${profile.label} to the widget.`);
-    });
-    container.appendChild(card);
-  }
-}
-
-function renderTarget(target) {
-  $('target').textContent = target ? JSON.stringify(target, null, 2) : 'No target selected.';
+function canInject(url) {
+  return Boolean(originFromUrl(url));
 }
 
 async function getActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  state.tabId = tab?.id ?? null;
+  state.tabUrl = tab?.url || '';
+  state.tabTitle = tab?.title || '';
+  state.originKey = originFromUrl(state.tabUrl) || 'global';
   return tab || null;
 }
 
-async function refreshActiveTab() {
-  const tab = await getActiveTab();
-  state.tabId = tab?.id ?? null;
-  state.tabTitle = tab?.title || '';
-  state.tabUrl = tab?.url || '';
-  renderTabMeta();
-  return tab;
+async function storageGet(key) {
+  return await chrome.storage.local.get(key);
 }
 
-async function ensureInjected(tabId = state.tabId) {
-  if (tabId == null || state.injectedTabs.has(tabId)) {
-    return true;
+async function storageSet(payload) {
+  await chrome.storage.local.set(payload);
+}
+
+async function loadConfig() {
+  const key = `siteaware.config.${state.originKey}`;
+  const globalKey = 'siteaware.config.global';
+  const stored = await storageGet([key, globalKey]);
+  state.config = sanitizeWidgetConfig(stored[key] || stored[globalKey] || defaultWidgetConfig);
+}
+
+async function saveConfig(scope = 'site') {
+  const key = scope === 'global' ? 'siteaware.config.global' : `siteaware.config.${state.originKey}`;
+  await storageSet({ [key]: state.config });
+}
+
+async function ensureInjected() {
+  if (state.tabId == null || !canInject(state.tabUrl)) {
+    state.injected = false;
+    renderStatus();
+    return false;
   }
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    files: ['content-script.js'],
-  });
-  state.injectedTabs.add(tabId);
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: state.tabId },
+      files: ['content-script.js'],
+    });
+  } catch (error) {
+    const message = String(error?.message || '');
+    if (!message.includes('already')) {
+      setToast(t('تعذر حقن المعاينة في هذه الصفحة.', 'Could not inject preview on this page.'));
+      state.injected = false;
+      renderStatus();
+      return false;
+    }
+  }
+  state.injected = true;
+  renderStatus();
   return true;
 }
 
-async function sendMessageToTab(tabId, message) {
-  return await new Promise((resolve, reject) => {
-    chrome.tabs.sendMessage(tabId, message, (response) => {
-      const error = chrome.runtime.lastError;
-      if (error) {
-        reject(new Error(error.message));
+async function sendToTab(message) {
+  if (!(await ensureInjected())) return null;
+  return await new Promise((resolve) => {
+    chrome.tabs.sendMessage(state.tabId, message, (response) => {
+      if (chrome.runtime.lastError) {
+        state.injected = false;
+        renderStatus();
+        resolve(null);
         return;
       }
-      resolve(response);
+      resolve(response || null);
     });
   });
 }
 
-async function injectAndSend(message, { retry = true } = {}) {
-  await refreshActiveTab();
-  if (state.tabId == null) {
-    setStatus('No active tab found.');
-    return null;
-  }
+async function syncPreview() {
+  await saveConfig('site');
+  await sendToTab({ type: 'SITEAWARE_RENDER_WIDGET', config: state.config });
+  renderControls();
+  renderStatus();
+}
 
-  try {
-    await ensureInjected(state.tabId);
-    return await sendMessageToTab(state.tabId, message);
-  } catch (error) {
-    if (!retry) {
-      setStatus(`Could not reach the page: ${error.message}`);
-      return null;
-    }
+function setConfig(patch) {
+  state.config = sanitizeWidgetConfig({
+    ...state.config,
+    ...patch,
+    appearance: {
+      ...state.config.appearance,
+      ...(patch.appearance || {}),
+    },
+  });
+  void syncPreview();
+}
 
-    state.injectedTabs.delete(state.tabId);
-    try {
-      await ensureInjected(state.tabId);
-      return await sendMessageToTab(state.tabId, message);
-    } catch (retryError) {
-      setStatus(`Could not reach the page: ${retryError.message}`);
-      return null;
-    }
+function setToast(message) {
+  $('toast').textContent = message;
+  window.clearTimeout(setToast.timer);
+  setToast.timer = window.setTimeout(() => {
+    $('toast').textContent = '';
+  }, 3600);
+}
+
+function renderStatus() {
+  const host = hostnameFromUrl(state.tabUrl);
+  $('siteName').textContent = host || t('صفحة غير مدعومة', 'Unsupported page');
+  $('siteUrl').textContent = canInject(state.tabUrl) ? state.originKey : state.tabUrl || 'n/a';
+  $('injectStatus').textContent = state.injected ? t('نعم', 'Yes') : t('لا', 'No');
+  $('permissionStatus').textContent = canInject(state.tabUrl) ? t('جاهز', 'Ready') : t('غير مدعوم', 'Blocked');
+  $('backendStatus').textContent = state.backendReady ? 'Gemini ready' : 'Rule match';
+  $('directionStatus').textContent = state.profile?.direction?.toUpperCase() || state.config.direction.toUpperCase();
+  $('themeStatus').textContent = state.profile?.themeMode || (state.config.appearance.backgroundColor === '#ffffff' ? 'light' : 'custom');
+}
+
+function renderChoices(containerId, items, current, setter, type) {
+  const container = $(containerId);
+  container.innerHTML = '';
+  for (const item of items) {
+    const button = document.createElement('button');
+    button.className = current === item.id ? 'choice active' : 'choice';
+    button.type = 'button';
+    button.title = item.label;
+    button.innerHTML = type === 'icon'
+      ? `<span class="glyph">${item.glyph}</span><small>${item.label}</small>`
+      : `<span>${item.label}</span>`;
+    button.addEventListener('click', () => setter(item.id));
+    container.appendChild(button);
   }
 }
 
-async function scanPage() {
-  setStatus('Scanning this page...');
-  const response = await injectAndSend({ type: 'SITEAWARE_SCAN_PAGE' });
-  if (!response?.snapshot) {
+function renderControls() {
+  const config = state.config;
+  document.documentElement.lang = config.locale;
+  document.documentElement.dir = config.locale === 'ar' ? 'rtl' : 'ltr';
+  $('languageToggle').textContent = config.locale === 'ar' ? 'EN' : 'AR';
+  $('openToggle').checked = config.previewOpen;
+  $('dirToggle').checked = config.direction === 'rtl';
+  $('primaryColor').value = toHex(config.appearance.primaryColor, '#2563eb');
+  $('surfaceColor').value = toHex(config.appearance.surfaceColor, '#ffffff');
+  $('widthRange').value = String(config.appearance.widgetWidth);
+  $('heightRange').value = String(config.appearance.widgetHeight);
+  $('radiusSelect').value = config.appearance.radius;
+  $('positionSelect').value = config.appearance.launcherPosition;
+  $('scopeLabel').textContent = state.originKey === 'global' ? 'Global' : hostnameFromUrl(state.originKey);
+
+  renderChoices('iconChoices', catalog.icons, config.assistantIcon, (value) => setConfig({ assistantIcon: value }), 'icon');
+  renderChoices('launcherChoices', catalog.launchers, config.launcher, (value) => setConfig({ launcher: value }));
+  renderChoices('shellChoices', catalog.chatShells, config.chatShell, (value) => setConfig({ chatShell: value }));
+  renderChoices('assistantMessageChoices', catalog.messageStyles, config.assistantMessage, (value) => setConfig({ assistantMessage: value }));
+  renderChoices('inputChoices', catalog.inputBars, config.inputBar, (value) => setConfig({ inputBar: value }));
+  renderChoices('sendChoices', catalog.sendButtons, config.sendButton, (value) => setConfig({ sendButton: value }));
+  renderProfile();
+}
+
+function renderProfile() {
+  const profile = state.profile;
+  const box = $('profileBox');
+  if (!profile) {
+    box.innerHTML = `<p>${t('افحص الموقع لاستخراج الألوان والخطوط والحواف بأمان.', 'Scan the site to extract safe colors, fonts, and radius.')}</p>`;
     return;
   }
-
-  state.snapshot = response.snapshot;
-  state.recommendations = response.recommendations || generateRecommendations(response.snapshot);
-  state.activeProfileId = null;
-  renderSnapshot(state.snapshot);
-  renderRecommendations();
-  renderProfiles();
-  $('summaryHint').textContent = 'Live page scan complete.';
-  setStatus('Scan complete. Recommendations are ready.');
+  box.innerHTML = `
+    <div class="profile-grid">
+      <span>${t('الاتجاه', 'Direction')}<b>${profile.direction}</b></span>
+      <span>${t('النمط', 'Theme')}<b>${profile.themeMode}</b></span>
+      <span>${t('الرئيسي', 'Primary')}<b><i style="background:${profile.primary}"></i>${profile.primary}</b></span>
+      <span>${t('الخلفية', 'Background')}<b><i style="background:${profile.background}"></i>${profile.background}</b></span>
+      <span>${t('الحواف', 'Radius')}<b>${profile.radius}px</b></span>
+      <span>${t('العينات', 'Samples')}<b>${profile.evidenceCounts?.sampledElements || 0}</b></span>
+    </div>
+  `;
 }
 
-async function applyStrategy(strategy, label) {
-  setStatus(`Applying ${label}...`);
-  const response = await injectAndSend({ type: 'SITEAWARE_AUTO_MATCH', strategy });
-  if (response?.snapshot) {
-    state.snapshot = response.snapshot;
-    state.recommendations = response.recommendations || generateRecommendations(response.snapshot);
-    renderSnapshot(state.snapshot);
-    renderRecommendations();
-    $('summaryHint').textContent = `${label} applied from a live scan.`;
+function toHex(value, fallback) {
+  const text = String(value || '').trim();
+  if (/^#[0-9a-f]{6}$/i.test(text)) return text;
+  const match = text.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (!match) return fallback;
+  return `#${[match[1], match[2], match[3]].map((part) => Number(part).toString(16).padStart(2, '0')).join('')}`;
+}
+
+async function detectSiteStyle() {
+  const response = await sendToTab({ type: 'SITEAWARE_SCAN_PAGE' });
+  if (!response?.profile) {
+    setToast(t('لم أستطع فحص هذه الصفحة.', 'Could not scan this page.'));
+    return;
   }
-  setStatus(`${label} applied to the widget.`);
+  state.profile = response.profile;
+  renderProfile();
+  renderStatus();
+  setToast(t('تم استخراج تصميم الصفحة بدون محتوى خاص.', 'Safe site style extracted without private content.'));
 }
 
-function bindActions() {
-  $('scanBtn').addEventListener('click', scanPage);
-  $('brandBtn').addEventListener('click', () => applyStrategy('auto-brand', 'Brand Match'));
-  $('contrastBtn').addEventListener('click', () => applyStrategy('auto-contrast', 'High Contrast'));
-  $('premiumBtn').addEventListener('click', () => applyStrategy('auto-premium', 'Premium'));
-  $('injectBtn').addEventListener('click', async () => {
-    const theme = state.recommendations[0] || generateRecommendations(state.snapshot || demoProfiles[0].snapshot)[0];
-    await injectAndSend({ type: 'SITEAWARE_RENDER_WIDGET', config: { theme, open: true } });
-    setStatus(`Injected widget using ${theme.label}.`);
-  });
-  $('removeBtn').addEventListener('click', async () => {
-    await injectAndSend({ type: 'SITEAWARE_REMOVE_WIDGET' });
-    setStatus('Widget removed.');
-  });
-  $('pickBtn').addEventListener('click', async () => {
-    await injectAndSend({ type: 'SITEAWARE_START_TARGET_PICKER' });
-    setStatus('Target picker is active. Click an element on the page.');
-  });
-  $('clearBtn').addEventListener('click', async () => {
-    await injectAndSend({ type: 'SITEAWARE_CLEAR_TARGET' });
-    state.target = null;
-    renderTarget(null);
-    setStatus('Target selection cleared.');
-  });
+async function applyDetected() {
+  if (!state.profile) {
+    await detectSiteStyle();
+  }
+  if (!state.profile) return;
+  state.config = configFromDesignProfile(state.profile);
+  await syncPreview();
+  setToast(t('تم تطبيق التصميم المستخرج مباشرة.', 'Detected style applied live.'));
 }
+
+async function aiMatchThisSite() {
+  if (!state.profile) {
+    await detectSiteStyle();
+  }
+  if (!state.profile) return;
+  let next = configFromDesignProfile(state.profile);
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/design`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        locale: state.config.locale,
+        site: { name: state.profile.source?.hostname || hostnameFromUrl(state.tabUrl), vibe: 'current website visual style' },
+        config: state.config,
+        catalog,
+        themeMode: state.profile.themeMode,
+        prompt: `Match this safe design profile only. Do not request page text. Profile: ${JSON.stringify(state.profile)}`,
+      }),
+    });
+    const payload = await response.json();
+    if (payload?.ok && payload.patch) {
+      next = sanitizeWidgetConfig({ ...next, ...payload.patch, appearance: { ...next.appearance, ...(payload.patch.appearance || {}) } });
+      state.backendReady = true;
+    }
+  } catch {
+    state.backendReady = false;
+  }
+  state.config = next;
+  await syncPreview();
+  setToast(state.backendReady ? t('Gemini طبّق توصية آمنة.', 'Gemini applied a safe recommendation.') : t('Gemini غير متاح، طبّقت مطابقة محلية.', 'Gemini unavailable, local match applied.'));
+}
+
+async function resetThisSite() {
+  state.config = sanitizeWidgetConfig(defaultWidgetConfig);
+  await chrome.storage.local.remove(`siteaware.config.${state.originKey}`);
+  await syncPreview();
+}
+
+function bind() {
+  $('languageToggle').addEventListener('click', () => setConfig({ locale: state.config.locale === 'ar' ? 'en' : 'ar' }));
+  $('openToggle').addEventListener('change', (event) => setConfig({ previewOpen: event.target.checked }));
+  $('dirToggle').addEventListener('change', (event) => setConfig({ direction: event.target.checked ? 'rtl' : 'ltr' }));
+  $('primaryColor').addEventListener('input', (event) => setConfig({ appearance: { primaryColor: event.target.value } }));
+  $('surfaceColor').addEventListener('input', (event) => setConfig({ appearance: { surfaceColor: event.target.value } }));
+  $('widthRange').addEventListener('input', (event) => setConfig({ appearance: { widgetWidth: Number(event.target.value) } }));
+  $('heightRange').addEventListener('input', (event) => setConfig({ appearance: { widgetHeight: Number(event.target.value) } }));
+  $('radiusSelect').addEventListener('change', (event) => setConfig({ appearance: { radius: event.target.value } }));
+  $('positionSelect').addEventListener('change', (event) => setConfig({ appearance: { launcherPosition: event.target.value } }));
+  $('detectBtn').addEventListener('click', detectSiteStyle);
+  $('applyDetectedBtn').addEventListener('click', applyDetected);
+  $('matchBtn').addEventListener('click', aiMatchThisSite);
+  $('removeBtn').addEventListener('click', async () => {
+    await sendToTab({ type: 'SITEAWARE_REMOVE_WIDGET' });
+    state.injected = false;
+    renderStatus();
+  });
+  $('resetBtn').addEventListener('click', resetThisSite);
+}
+
+chrome.tabs.onActivated?.addListener(async () => {
+  await boot();
+});
+
+chrome.tabs.onUpdated?.addListener((tabId, changeInfo) => {
+  if (tabId === state.tabId && (changeInfo.status === 'complete' || changeInfo.url)) {
+    void boot();
+  }
+});
 
 chrome.runtime.onMessage.addListener((message) => {
-  if (message?.type === 'SITEAWARE_SCAN_RESULT') {
-    state.snapshot = message.snapshot;
-    state.recommendations = message.recommendations || generateRecommendations(message.snapshot);
-    state.activeProfileId = null;
-    renderSnapshot(state.snapshot);
-    renderRecommendations();
-    renderProfiles();
-    $('summaryHint').textContent = 'Live page scan complete.';
-    setStatus('Scan result received from the page.');
-  }
-
-  if (message?.type === 'SITEAWARE_TARGET_SELECTED') {
-    state.target = message.metadata;
-    renderTarget(state.target);
-    setStatus('Target selected.');
-  }
-
-  if (message?.type === 'SITEAWARE_TARGET_PICKER_CANCELLED') {
-    setStatus('Target picker canceled.');
+  if (message?.type === 'SITEAWARE_ROUTE_CHANGED') {
+    void getActiveTab().then(() => {
+      renderStatus();
+      void syncPreview();
+    });
   }
 });
 
-chrome.tabs.onActivated?.addListener(() => {
-  void refreshActiveTab();
-});
+async function checkBackend() {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/health`);
+    const payload = await response.json();
+    state.backendReady = payload?.mode === 'ready';
+  } catch {
+    state.backendReady = false;
+  }
+}
 
-chrome.tabs.onUpdated?.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'loading' || changeInfo.url) {
-    state.injectedTabs.delete(tabId);
-  }
-  if (tabId === state.tabId && changeInfo.status === 'complete') {
-    state.tabTitle = tab?.title || state.tabTitle;
-    state.tabUrl = tab?.url || state.tabUrl;
-    renderTabMeta();
-  }
-});
+async function boot() {
+  await getActiveTab();
+  await loadConfig();
+  renderControls();
+  renderStatus();
+  await checkBackend();
+  await syncPreview();
+}
 
-bindActions();
-renderTarget(null);
-renderSnapshot(null);
-renderRecommendations();
-renderProfiles();
-void refreshActiveTab().then((tab) => {
-  if (tab) {
-    setStatus(`Ready for ${hostnameFromUrl(tab.url) || 'the active tab'}.`);
-  }
-});
+bind();
+void boot();

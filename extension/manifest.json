@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "SiteAware Preview",
+  "name": "SiteAware Widget Studio",
   "version": "0.1.0",
-  "description": "Preview, scan, and spotlight SiteAware on live websites.",
+  "description": "Design the SiteAware widget in a side panel and preview it live on the current website.",
   "action": {
     "default_title": "SiteAware Preview"
   },
   "permissions": ["activeTab", "scripting", "storage", "tabs", "sidePanel"],
+  "host_permissions": ["https://siteaware-widget-studio.onrender.com/*"],
   "background": {
     "service_worker": "service-worker.js",
     "type": "module"

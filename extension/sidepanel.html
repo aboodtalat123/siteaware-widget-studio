@@ -1,328 +1,319 @@
 <!doctype html>
-<html lang="en">
+<html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SiteAware Preview</title>
+    <title>SiteAware Studio</title>
     <style>
       :root {
-        color-scheme: dark;
-        --bg: #07111f;
-        --panel: rgba(10, 19, 34, 0.9);
-        --panel-2: rgba(18, 30, 50, 0.92);
-        --line: rgba(148, 163, 184, 0.16);
-        --text: #edf4ff;
-        --muted: #97a8c7;
-        --accent: #7cc8ff;
-        --accent-2: #8ff0c1;
-        --shadow: 0 24px 72px rgba(0, 0, 0, 0.4);
+        color-scheme: light;
+        --bg: #f6f7f9;
+        --panel: #ffffff;
+        --line: #dde3eb;
+        --text: #151922;
+        --muted: #667085;
+        --soft: #eef2f7;
+        --accent: #2563eb;
+        --radius: 8px;
       }
-
-      * {
-        box-sizing: border-box;
-      }
-
+      * { box-sizing: border-box; }
       body {
         margin: 0;
         min-height: 100vh;
-        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-        background:
-          radial-gradient(circle at top right, rgba(124, 200, 255, 0.15), transparent 28%),
-          radial-gradient(circle at 15% 25%, rgba(143, 240, 193, 0.12), transparent 24%),
-          linear-gradient(180deg, #050b15 0%, var(--bg) 100%);
+        background: var(--bg);
         color: var(--text);
+        font: 13px/1.5 "Segoe UI", "Noto Sans Arabic", system-ui, sans-serif;
       }
-
-      button,
-      input,
-      textarea,
-      select {
-        font: inherit;
-      }
-
-      button {
-        cursor: pointer;
-      }
-
+      button, input, select { font: inherit; }
+      button { cursor: pointer; }
       .app {
         display: grid;
-        gap: 12px;
-        padding: 14px;
+        gap: 10px;
+        padding: 10px;
       }
-
-      .hero,
-      .card {
+      .topbar, .section {
+        background: var(--panel);
         border: 1px solid var(--line);
-        border-radius: 22px;
-        background: linear-gradient(180deg, var(--panel), var(--panel-2));
-        box-shadow: var(--shadow);
-        overflow: hidden;
+        border-radius: var(--radius);
       }
-
-      .hero {
-        padding: 16px;
+      .topbar {
+        display: grid;
+        gap: 10px;
+        padding: 12px;
+        position: sticky;
+        top: 0;
+        z-index: 4;
       }
-
-      .hero-top {
+      .brand-row, .status-row, .field-row, .section-head {
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         justify-content: space-between;
-        gap: 12px;
+        gap: 8px;
       }
-
-      .eyebrow {
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-        font-size: 11px;
-        color: var(--accent-2);
-        margin-bottom: 10px;
+      .brand strong {
+        display: block;
+        font-size: 16px;
       }
-
-      h1 {
-        margin: 0;
-        font-size: 20px;
-        line-height: 1.15;
-      }
-
-      .hero p,
-      .meta,
-      .small {
+      .brand span, .site-url, small, .hint {
         color: var(--muted);
-        margin: 8px 0 0;
-        font-size: 12px;
-        line-height: 1.5;
+        font-size: 11px;
       }
-
-      .status-chip {
-        border: 1px solid rgba(124, 200, 255, 0.35);
+      .icon-button {
+        width: 36px;
+        height: 36px;
         border-radius: 999px;
-        padding: 8px 10px;
-        background: rgba(124, 200, 255, 0.14);
-        color: #dff2ff;
-        font-size: 12px;
+        border: 1px solid var(--line);
+        background: var(--soft);
+        color: var(--text);
+      }
+      .status-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+      }
+      .status-card {
+        min-width: 0;
+        padding: 8px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #fafbfc;
+      }
+      .status-card span, .status-card b {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
         white-space: nowrap;
       }
-
-      .toolbar,
-      .row,
-      .preview-actions,
-      .profile-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
+      .status-card b {
+        margin-top: 2px;
+        font-size: 12px;
       }
-
-      .toolbar {
-        margin-top: 14px;
+      .section {
+        padding: 12px;
       }
-
-      .pill,
-      .ghost,
-      .primary {
-        border-radius: 999px;
-        border: 1px solid var(--line);
-        padding: 8px 11px;
-        color: var(--text);
-        background: rgba(255, 255, 255, 0.03);
+      .section-head {
+        margin-bottom: 10px;
       }
-
-      .primary {
-        border-color: rgba(124, 200, 255, 0.4);
-        background: linear-gradient(135deg, rgba(124, 200, 255, 0.24), rgba(143, 240, 193, 0.18));
-      }
-
-      .ghost {
-        color: var(--muted);
-      }
-
-      .panel-head {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 10px;
-        margin-bottom: 12px;
-      }
-
-      .panel-head strong {
+      .section-head strong {
         font-size: 14px;
       }
-
-      .section-body {
-        padding: 14px;
+      .choices {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 7px;
       }
-
-      .summary-grid,
-      .profile-grid,
-      .recs-grid {
+      .choice {
+        min-height: 52px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #fff;
+        color: var(--text);
+        display: grid;
+        place-items: center;
+        gap: 3px;
+        padding: 7px;
+      }
+      .choice.active {
+        border-color: var(--accent);
+        box-shadow: inset 0 0 0 1px var(--accent);
+        background: #f2f7ff;
+      }
+      .glyph {
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        background: var(--accent);
+        color: #fff;
+        font-weight: 800;
+      }
+      .control-grid {
         display: grid;
         gap: 10px;
       }
-
-      .summary-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      .summary-card,
-      .profile-card,
-      .rec-card {
-        border-radius: 16px;
-        border: 1px solid rgba(148, 163, 184, 0.14);
-        background: rgba(6, 12, 22, 0.55);
-        padding: 12px;
-      }
-
-      .summary-card strong,
-      .profile-card strong,
-      .rec-card strong {
-        display: block;
-        margin-bottom: 4px;
-        font-size: 13px;
-      }
-
-      .summary-card span,
-      .profile-card span,
-      .rec-card span {
-        font-size: 12px;
+      label {
+        display: grid;
+        gap: 5px;
         color: var(--muted);
-        line-height: 1.4;
+        font-size: 11px;
       }
-
-      .profile-grid {
-        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      input[type="color"] {
+        width: 100%;
+        height: 38px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 4px;
+        background: #fff;
       }
-
-      .profile-card {
-        text-align: left;
+      input[type="range"] { width: 100%; }
+      select {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 9px;
+        background: #fff;
+        color: var(--text);
       }
-
-      .profile-card .preview-actions {
-        margin-top: 10px;
-      }
-
-      .rec-card {
+      .switch-row {
         display: grid;
-        gap: 10px;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--line);
       }
-
-      .swatches {
+      .switch-row:last-child { border-bottom: 0; }
+      .actions {
         display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-columns: 1fr 1fr;
         gap: 8px;
       }
-
-      .swatches span {
-        display: block;
-        height: 16px;
-        border-radius: 999px;
-        border: 1px solid rgba(255, 255, 255, 0.14);
+      .primary, .secondary, .danger {
+        min-height: 40px;
+        border-radius: var(--radius);
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--text);
       }
-
-      pre {
-        margin: 0;
-        padding: 12px;
-        border-radius: 16px;
-        border: 1px solid rgba(148, 163, 184, 0.14);
-        background: rgba(4, 9, 17, 0.8);
-        color: #d8e4fb;
-        white-space: pre-wrap;
-        word-break: break-word;
-        max-height: 260px;
-        overflow: auto;
-        font-size: 11px;
-        line-height: 1.5;
+      .primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: #fff;
       }
-
-      .empty {
+      .danger { color: #b42318; }
+      .profile-box {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #fafbfc;
+        padding: 10px;
+      }
+      .profile-box p {
         margin: 0;
-        padding: 12px 0 2px;
         color: var(--muted);
+      }
+      .profile-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .profile-grid span, .profile-grid b {
+        display: block;
+      }
+      .profile-grid b {
+        color: var(--text);
+        word-break: break-word;
+      }
+      .profile-grid i {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        margin-inline-end: 5px;
+      }
+      .toast {
+        min-height: 18px;
+        color: var(--accent);
         font-size: 12px;
-      }
-
-      .status-line {
-        color: var(--accent-2);
-      }
-
-      @media (max-width: 460px) {
-        .summary-grid {
-          grid-template-columns: 1fr;
-        }
       }
     </style>
   </head>
   <body>
-    <div class="app">
-      <section class="hero">
-        <div class="hero-top">
-          <div>
-            <div class="eyebrow">SiteAware Preview</div>
-            <h1>Live page scanner and widget launcher</h1>
-            <p id="tabMeta">No active tab yet.</p>
+    <main class="app">
+      <section class="topbar">
+        <div class="brand-row">
+          <div class="brand">
+            <strong>SiteAware Studio</strong>
+            <span id="siteName">...</span>
+            <span class="site-url" id="siteUrl"></span>
           </div>
-          <div class="status-chip" id="status">Ready.</div>
+          <button class="icon-button" id="languageToggle" type="button">EN</button>
         </div>
-        <div class="toolbar">
-          <button id="scanBtn" class="primary">Scan This Page</button>
-          <button id="brandBtn" class="pill">Brand Match</button>
-          <button id="contrastBtn" class="pill">High Contrast</button>
-          <button id="premiumBtn" class="pill">Premium</button>
-          <button id="injectBtn" class="pill">Inject Widget</button>
-          <button id="removeBtn" class="ghost">Remove Widget</button>
-          <button id="pickBtn" class="pill">Pick Target</button>
-          <button id="clearBtn" class="ghost">Clear Target</button>
+        <div class="status-row">
+          <div class="status-card"><span>Preview</span><b id="injectStatus">No</b></div>
+          <div class="status-card"><span>Site</span><b id="permissionStatus">Ready</b></div>
+          <div class="status-card"><span>AI</span><b id="backendStatus">Rule match</b></div>
+        </div>
+        <div class="status-row">
+          <div class="status-card"><span>Scope</span><b id="scopeLabel">Site</b></div>
+          <div class="status-card"><span>Dir</span><b id="directionStatus">RTL</b></div>
+          <div class="status-card"><span>Theme</span><b id="themeStatus">Light</b></div>
+        </div>
+        <div id="toast" class="toast"></div>
+      </section>
+
+      <section class="section">
+        <div class="section-head"><strong>Preview</strong><span class="hint">Live on page</span></div>
+        <div class="switch-row"><span>Open chat</span><input id="openToggle" type="checkbox" /></div>
+        <div class="switch-row"><span>RTL</span><input id="dirToggle" type="checkbox" /></div>
+      </section>
+
+      <section class="section">
+        <div class="section-head"><strong>Icons</strong><span class="hint">Toolbar mark</span></div>
+        <div id="iconChoices" class="choices"></div>
+      </section>
+
+      <section class="section">
+        <div class="section-head"><strong>Launcher</strong><span class="hint">Right-side trigger</span></div>
+        <div id="launcherChoices" class="choices"></div>
+      </section>
+
+      <section class="section">
+        <div class="section-head"><strong>Chat Template</strong><span class="hint">Live shell</span></div>
+        <div id="shellChoices" class="choices"></div>
+      </section>
+
+      <section class="section">
+        <div class="section-head"><strong>Messages</strong><span class="hint">Reply style</span></div>
+        <div id="assistantMessageChoices" class="choices"></div>
+      </section>
+
+      <section class="section">
+        <div class="section-head"><strong>Input</strong><span class="hint">Composer and send</span></div>
+        <div id="inputChoices" class="choices"></div>
+        <div style="height:8px"></div>
+        <div id="sendChoices" class="choices"></div>
+      </section>
+
+      <section class="section">
+        <div class="section-head"><strong>Colors And Layout</strong><span class="hint">Instant sync</span></div>
+        <div class="control-grid">
+          <label>Primary<input id="primaryColor" type="color" /></label>
+          <label>Surface<input id="surfaceColor" type="color" /></label>
+          <label>Width<input id="widthRange" type="range" min="320" max="520" step="4" /></label>
+          <label>Height<input id="heightRange" type="range" min="440" max="760" step="4" /></label>
+          <label>Radius
+            <select id="radiusSelect">
+              <option value="sm">Small</option>
+              <option value="md">Medium</option>
+              <option value="lg">Large</option>
+              <option value="xl">Extra Large</option>
+            </select>
+          </label>
+          <label>Launcher position
+            <select id="positionSelect">
+              <option value="bottom-right">Bottom right</option>
+              <option value="bottom-left">Bottom left</option>
+              <option value="right-edge">Right edge</option>
+              <option value="left-edge">Left edge</option>
+            </select>
+          </label>
         </div>
       </section>
 
-      <section class="card">
-        <div class="section-body">
-          <div class="panel-head">
-            <strong>Detected Page</strong>
-            <span class="small" id="summaryHint">Run a scan or choose a demo profile.</span>
-          </div>
-          <div id="summary" class="summary-grid"></div>
+      <section class="section">
+        <div class="section-head"><strong>Site Style</strong><span class="hint">Safe metadata only</span></div>
+        <div id="profileBox" class="profile-box"></div>
+        <div style="height:10px"></div>
+        <div class="actions">
+          <button id="detectBtn" class="secondary" type="button">Detect Style</button>
+          <button id="applyDetectedBtn" class="secondary" type="button">Apply Palette</button>
+          <button id="matchBtn" class="primary" type="button">Match This Site</button>
+          <button id="resetBtn" class="secondary" type="button">Reset</button>
+          <button id="removeBtn" class="danger" type="button">Remove Widget</button>
         </div>
       </section>
-
-      <section class="card">
-        <div class="section-body">
-          <div class="panel-head">
-            <strong>Demo Profiles</strong>
-            <span class="small">Deterministic local samples</span>
-          </div>
-          <div id="profiles" class="profile-grid"></div>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="section-body">
-          <div class="panel-head">
-            <strong>Recommendations</strong>
-            <span class="small" id="recsHint">No recommendations yet.</span>
-          </div>
-          <div id="recs" class="recs-grid"></div>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="section-body">
-          <div class="panel-head">
-            <strong>Selected Target</strong>
-            <span class="small status-line">Picker output</span>
-          </div>
-          <pre id="target">No target selected.</pre>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="section-body">
-          <div class="panel-head">
-            <strong>Raw Snapshot</strong>
-            <span class="small">Stable JSON for debugging</span>
-          </div>
-          <pre id="snapshot">{}</pre>
-        </div>
-      </section>
-    </div>
+    </main>
     <script type="module" src="sidepanel.js"></script>
   </body>
 </html>
