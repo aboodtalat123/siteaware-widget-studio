@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,14 +7,20 @@
     <style>
       :root {
         color-scheme: light;
-        --bg: #f6f7f9;
+        --bg: #f3f4f6;
         --panel: #ffffff;
-        --line: #dde3eb;
-        --text: #151922;
-        --muted: #667085;
-        --soft: #eef2f7;
-        --accent: #2563eb;
-        --radius: 8px;
+        --line: #e5e7eb;
+        --line-strong: #d4d8df;
+        --text: #111318;
+        --muted: #676c78;
+        --soft: #f1f2f5;
+        --accent: #4f46e5;
+        --accent-ink: #ffffff;
+        --accent-soft: #eef0ff;
+        --danger: #b42318;
+        --ok: #13795b;
+        --radius: 12px;
+        --radius-sm: 9px;
       }
       * { box-sizing: border-box; }
       body {
@@ -23,207 +29,164 @@
         background: var(--bg);
         color: var(--text);
         font: 13px/1.5 "Segoe UI", "Noto Sans Arabic", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
       }
-      button, input, select { font: inherit; }
+      button, input, select, textarea { font: inherit; }
       button { cursor: pointer; }
-      .app {
+      [hidden] { display: none !important; }
+
+      .app { display: grid; gap: 10px; padding: 12px; }
+
+      .topbar {
         display: grid;
-        gap: 10px;
-        padding: 10px;
+        gap: 12px;
+        padding: 14px;
+        background: linear-gradient(180deg, #ffffff, #fbfbfd);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        position: sticky;
+        top: 0;
+        z-index: 5;
       }
-      .topbar, .section {
+      .brand-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+      .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+      .brand .logo {
+        width: 38px; height: 38px; flex: 0 0 auto;
+        border-radius: 10px;
+        display: grid; place-items: center;
+        background: var(--accent); color: #fff;
+      }
+      .brand .logo svg { width: 22px; height: 22px; }
+      .brand .name { min-width: 0; }
+      .brand .name strong { display: block; font-size: 15px; line-height: 1.2; }
+      .brand .name span { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .icon-button {
+        width: 36px; height: 36px; flex: 0 0 auto;
+        border-radius: 9px; border: 1px solid var(--line);
+        background: #fff; color: var(--text); font-weight: 700;
+      }
+
+      .status-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+      .status-card {
+        min-width: 0; padding: 8px 9px;
+        border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fafbfc;
+      }
+      .status-card span, .status-card b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .status-card span { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .03em; }
+      .status-card b { margin-top: 2px; font-size: 12px; font-weight: 600; }
+
+      .site-cards { display: grid; gap: 6px; }
+      .site-card { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fafbfc; }
+      .site-card .swatch { width: 16px; height: 16px; border-radius: 5px; border: 1px solid var(--line); }
+      .site-card .label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .03em; }
+      .site-card .value { font-size: 12px; font-weight: 600; }
+      .site-card .meta { font-size: 11px; color: var(--muted); }
+
+      details.section {
         background: var(--panel);
         border: 1px solid var(--line);
         border-radius: var(--radius);
-      }
-      .topbar {
-        display: grid;
-        gap: 10px;
-        padding: 12px;
-        position: sticky;
-        top: 0;
-        z-index: 4;
-      }
-      .brand-row, .status-row, .field-row, .section-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-      }
-      .brand strong {
-        display: block;
-        font-size: 16px;
-      }
-      .brand span, .site-url, small, .hint {
-        color: var(--muted);
-        font-size: 11px;
-      }
-      .icon-button {
-        width: 36px;
-        height: 36px;
-        border-radius: 999px;
-        border: 1px solid var(--line);
-        background: var(--soft);
-        color: var(--text);
-      }
-      .status-row {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-      }
-      .status-card {
-        min-width: 0;
-        padding: 8px;
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-        background: #fafbfc;
-      }
-      .status-card span, .status-card b {
-        display: block;
         overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
       }
-      .status-card b {
-        margin-top: 2px;
-        font-size: 12px;
+      details.section > summary {
+        list-style: none;
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        padding: 13px 14px; cursor: pointer; user-select: none;
       }
-      .section {
-        padding: 12px;
-      }
-      .section-head {
-        margin-bottom: 10px;
-      }
-      .section-head strong {
-        font-size: 14px;
-      }
-      .choices {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 7px;
-      }
+      details.section > summary::-webkit-details-marker { display: none; }
+      details.section > summary .title { display: flex; flex-direction: column; min-width: 0; }
+      details.section > summary .title strong { font-size: 13px; font-weight: 650; }
+      details.section > summary .title small { color: var(--muted); font-size: 11px; }
+      details.section > summary .chev { color: var(--muted); transition: transform .18s ease; font-size: 12px; }
+      details.section[open] > summary .chev { transform: rotate(90deg); }
+      details.section > summary:hover { background: #fafbfd; }
+      .section-body { padding: 4px 14px 14px; display: grid; gap: 12px; }
+
+      .field-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+
+      .choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
       .choice {
-        min-height: 52px;
+        min-height: 46px;
         border: 1px solid var(--line);
-        border-radius: var(--radius);
-        background: #fff;
-        color: var(--text);
-        display: grid;
-        place-items: center;
-        gap: 3px;
-        padding: 7px;
+        border-radius: var(--radius-sm);
+        background: #fff; color: var(--text);
+        display: grid; place-items: center; gap: 2px; padding: 7px 6px;
+        font-size: 11px; line-height: 1.2; text-align: center;
       }
-      .choice.active {
-        border-color: var(--accent);
-        box-shadow: inset 0 0 0 1px var(--accent);
-        background: #f2f7ff;
+      .choice:hover { border-color: var(--line-strong); background: #fbfbfd; }
+      .choice.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
+      .choice .glyph, .choice .mark-preview {
+        width: 26px; height: 26px; border-radius: 50%;
+        display: grid; place-items: center;
+        background: var(--accent); color: #fff; font-weight: 800; font-size: 12px;
       }
-      .glyph {
-        width: 28px;
-        height: 28px;
-        border-radius: 999px;
-        display: grid;
-        place-items: center;
-        background: var(--accent);
-        color: #fff;
-        font-weight: 800;
-      }
-      .control-grid {
-        display: grid;
-        gap: 10px;
-      }
-      label {
-        display: grid;
-        gap: 5px;
-        color: var(--muted);
-        font-size: 11px;
-      }
+      .choice .mark-preview { background: transparent; color: var(--accent); border: 1px solid var(--line-strong); }
+      .choice .mark-preview svg { width: 18px; height: 18px; }
+      .choice .theme-swatches { display: flex; gap: 3px; }
+      .choice .theme-swatches i { width: 12px; height: 12px; border-radius: 4px; border: 1px solid var(--line); }
+
+      .control-grid { display: grid; gap: 11px; }
+      .control-grid.two { grid-template-columns: 1fr 1fr; gap: 9px; }
+      label.field { display: grid; gap: 5px; color: var(--muted); font-size: 11px; }
+      .color-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
       input[type="color"] {
+        width: 100%; height: 38px;
+        border: 1px solid var(--line); border-radius: var(--radius-sm);
+        padding: 3px; background: #fff; cursor: pointer;
+      }
+      input[type="text"], select, textarea {
         width: 100%;
-        height: 38px;
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-        padding: 4px;
-        background: #fff;
+        border: 1px solid var(--line); border-radius: var(--radius-sm);
+        padding: 9px 10px; background: #fff; color: var(--text);
       }
-      input[type="text"] {
-        width: 100%;
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-        padding: 9px;
-        background: #fff;
-        color: var(--text);
-      }
-      input[type="range"] { width: 100%; }
-      select {
-        width: 100%;
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-        padding: 9px;
-        background: #fff;
-        color: var(--text);
-      }
-      .switch-row {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 0;
-        border-bottom: 1px solid var(--line);
-      }
+      input[type="range"] { width: 100%; accent-color: var(--accent); }
+      textarea { resize: vertical; min-height: 74px; line-height: 1.55; }
+      .range-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+
+      .switch-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); }
       .switch-row:last-child { border-bottom: 0; }
-      .actions {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-      }
-      .primary, .secondary, .danger {
+      .switch-row .desc { display: flex; flex-direction: column; }
+      .switch-row .desc small { color: var(--muted); font-size: 11px; }
+      input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+
+      .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .actions .full { grid-column: 1 / -1; }
+      .btn {
         min-height: 40px;
-        border-radius: var(--radius);
+        border-radius: var(--radius-sm);
         border: 1px solid var(--line);
-        background: #fff;
-        color: var(--text);
+        background: #fff; color: var(--text); font-weight: 600;
       }
-      .primary {
-        border-color: var(--accent);
-        background: var(--accent);
-        color: #fff;
-      }
-      .danger { color: #b42318; }
+      .btn:hover { background: #fafafa; }
+      .btn.primary { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+      .btn.primary:hover { background: #4338ca; }
+      .btn.danger { color: var(--danger); border-color: #f3d0cc; }
+      .btn:disabled { opacity: .55; cursor: default; }
+
       .profile-box {
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-        background: #fafbfc;
-        padding: 10px;
+        border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fafbfd; padding: 11px; font-size: 12px;
       }
-      .profile-box p {
-        margin: 0;
-        color: var(--muted);
-      }
-      .profile-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-      }
-      .profile-grid span, .profile-grid b {
-        display: block;
-      }
-      .profile-grid b {
-        color: var(--text);
-        word-break: break-word;
-      }
-      .profile-grid i {
-        display: inline-block;
-        width: 10px;
-        height: 10px;
-        border-radius: 999px;
-        border: 1px solid var(--line);
-        margin-inline-end: 5px;
-      }
-      .toast {
-        min-height: 18px;
-        color: var(--accent);
-        font-size: 12px;
-      }
+      .profile-box p { margin: 0; color: var(--muted); }
+      .profile-grid { display: grid; gap: 9px; }
+      .profile-grid .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; }
+      .profile-grid .row .k { color: var(--muted); font-size: 11px; }
+      .profile-grid .row .v { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+      .profile-grid .row .v i { width: 11px; height: 11px; border-radius: 4px; border: 1px solid var(--line); display: inline-block; }
+      .profile-grid .conf { font-size: 10px; color: var(--muted); }
+
+      .ai-box { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--accent-soft); padding: 11px; display: grid; gap: 8px; }
+      .ai-box .pill-tag { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+      .ai-box p { margin: 0; font-size: 12px; color: var(--text); }
+
+      .toast { min-height: 18px; color: var(--accent); font-size: 12px; padding: 2px 2px; }
+
+      .build-info { font-size: 10px; color: var(--muted); text-align: center; padding: 4px 6px 10px; line-height: 1.6; }
+      .build-info b { color: var(--text); font-weight: 600; }
+
+      .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-inline-end: 5px; vertical-align: middle; }
+      .dot.on { background: var(--ok); }
+      .dot.off { background: #cbd2dc; }
+      .dot.warn { background: #c98f0a; }
     </style>
   </head>
   <body>
@@ -231,101 +194,221 @@
       <section class="topbar">
         <div class="brand-row">
           <div class="brand">
-            <strong>SiteAware Studio</strong>
-            <span id="siteName">...</span>
-            <span class="site-url" id="siteUrl"></span>
+            <span class="logo">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="18" rx="6.5" stroke="currentColor" stroke-width="1.8" />
+                <path d="M12 6.6c.66 1.86 1.6 2.8 3.46 3.46-1.86.66-2.8 1.6-3.46 3.46-.66-1.86-1.6-2.8-3.46-3.46 1.86-.66 2.8-1.6 3.46-3.46Z" fill="currentColor" />
+              </svg>
+            </span>
+            <div class="name">
+              <strong>SiteAware Studio</strong>
+              <span id="siteUrl">…</span>
+            </div>
           </div>
           <button class="icon-button" id="languageToggle" type="button">EN</button>
         </div>
+
         <div class="status-row">
-          <div class="status-card"><span>Preview</span><b id="injectStatus">No</b></div>
-          <div class="status-card"><span>Site</span><b id="permissionStatus">Ready</b></div>
-          <div class="status-card"><span>AI</span><b id="backendStatus">Rule match</b></div>
+          <div class="status-card"><span>Preview</span><b id="liveStatus">·</b></div>
+          <div class="status-card"><span>Direction</span><b id="directionStatus">·</b></div>
+          <div class="status-card"><span>Theme</span><b id="themeStatus">·</b></div>
+          <div class="status-card"><span>Analysis</span><b id="analysisStatus">·</b></div>
         </div>
-        <div class="status-row">
-          <div class="status-card"><span>Scope</span><b id="scopeLabel">Site</b></div>
-          <div class="status-card"><span>Dir</span><b id="directionStatus">RTL</b></div>
-          <div class="status-card"><span>Theme</span><b id="themeStatus">Light</b></div>
-        </div>
+
         <div id="toast" class="toast"></div>
       </section>
 
-      <section class="section">
-        <div class="section-head"><strong>Preview</strong><span class="hint">Live on page</span></div>
-        <div class="switch-row"><span>Open chat</span><input id="openToggle" type="checkbox" /></div>
-        <div class="switch-row"><span>RTL</span><input id="dirToggle" type="checkbox" /></div>
-      </section>
+      <details class="section" open>
+        <summary><span class="title"><strong>Overview</strong><small>Current site &amp; live preview</small></span><span class="chev">›</span></summary>
+        <div class="section-body">
+          <div class="site-cards" id="siteCards"></div>
+          <div class="switch-row">
+            <span class="desc">Live preview<small>Inject or remove the widget on this page</small></span>
+            <input id="previewToggle" type="checkbox" checked />
+          </div>
+          <div class="switch-row">
+            <span class="desc">Open chat<small>Preview the open assistant, not just the launcher</small></span>
+            <input id="openToggle" type="checkbox" />
+          </div>
+        </div>
+      </details>
 
-      <section class="section">
-        <div class="section-head"><strong>Brand</strong><span class="hint">Official identity</span></div>
-        <label>Assistant name<input id="assistantName" type="text" maxlength="48" /></label>
-      </section>
+      <details class="section">
+        <summary><span class="title"><strong>Site Style</strong><small>Safe metadata detection — no page content</small></span><span class="chev">›</span></summary>
+        <div class="section-body">
+          <div id="profileBox" class="profile-box"></div>
+          <div class="actions">
+            <button id="detectBtn" class="btn" type="button">Detect Style</button>
+            <button id="applyDetectedBtn" class="btn" type="button">Apply Detected</button>
+          </div>
+          <button id="matchBtn" class="btn primary full" type="button">✨ Match This Site (AI)</button>
+        </div>
+      </details>
 
-      <section class="section">
-        <div class="section-head"><strong>Icons</strong><span class="hint">Toolbar mark</span></div>
-        <div id="iconChoices" class="choices"></div>
-      </section>
+      <details class="section" open>
+        <summary><span class="title"><strong>Brand</strong><small>Official identity</small></span><span class="chev">›</span></summary>
+        <div class="section-body">
+          <label class="field">Assistant name<input id="assistantName" type="text" maxlength="48" /></label>
+          <div class="switch-row"><span>RTL direction</span><input id="dirToggle" type="checkbox" /></div>
+        </div>
+      </details>
 
-      <section class="section">
-        <div class="section-head"><strong>Launcher</strong><span class="hint">Right-side trigger</span></div>
-        <div id="launcherChoices" class="choices"></div>
-      </section>
+      <details class="section" open>
+        <summary><span class="title"><strong>Launcher</strong><small>Trigger styles</small></span><span class="chev">›</span></summary>
+        <div class="section-body"><div id="launcherChoices" class="choices"></div></div>
+      </details>
 
-      <section class="section">
-        <div class="section-head"><strong>Chat Template</strong><span class="hint">Live shell</span></div>
-        <div id="shellChoices" class="choices"></div>
-      </section>
+      <details class="section" open>
+        <summary><span class="title"><strong>Assistant Window</strong><small>Chat shells</small></span><span class="chev">›</span></summary>
+        <div class="section-body"><div id="shellChoices" class="choices"></div></div>
+      </details>
 
-      <section class="section">
-        <div class="section-head"><strong>Messages</strong><span class="hint">Reply style</span></div>
-        <div id="assistantMessageChoices" class="choices"></div>
-      </section>
+      <details class="section">
+        <summary><span class="title"><strong>Header</strong><small>Identity bar</small></span><span class="chev">›</span></summary>
+        <div class="section-body"><div id="headerChoices" class="choices"></div></div>
+      </details>
 
-      <section class="section">
-        <div class="section-head"><strong>Input</strong><span class="hint">Composer and send</span></div>
-        <div id="inputChoices" class="choices"></div>
-        <div style="height:8px"></div>
-        <div id="sendChoices" class="choices"></div>
-      </section>
+      <details class="section">
+        <summary><span class="title"><strong>Messages</strong><small>Assistant &amp; user bubbles</small></span><span class="chev">›</span></summary>
+        <div class="section-body">
+          <div class="field-label">Assistant replies</div>
+          <div id="assistantMessageChoices" class="choices"></div>
+          <div class="field-label">Your messages</div>
+          <div id="userMessageChoices" class="choices"></div>
+        </div>
+      </details>
 
-      <section class="section">
-        <div class="section-head"><strong>Colors And Layout</strong><span class="hint">Instant sync</span></div>
-        <div class="control-grid">
-          <label>Primary<input id="primaryColor" type="color" /></label>
-          <label>Surface<input id="surfaceColor" type="color" /></label>
-          <label>Width<input id="widthRange" type="range" min="320" max="520" step="4" /></label>
-          <label>Height<input id="heightRange" type="range" min="440" max="760" step="4" /></label>
-          <label>Radius
-            <select id="radiusSelect">
-              <option value="sm">Small</option>
-              <option value="md">Medium</option>
-              <option value="lg">Large</option>
-              <option value="xl">Extra Large</option>
+      <details class="section">
+        <summary><span class="title"><strong>Input &amp; Send</strong><small>Composer</small></span><span class="chev">›</span></summary>
+        <div class="section-body">
+          <div class="field-label">Composer</div>
+          <div id="inputChoices" class="choices"></div>
+          <div class="field-label">Send button</div>
+          <div id="sendChoices" class="choices"></div>
+        </div>
+      </details>
+
+      <details class="section">
+        <summary><span class="title"><strong>Sources &amp; CTA</strong><small>Citations and actions</small></span><span class="chev">›</span></summary>
+        <div class="section-body">
+          <div class="field-label">Sources</div>
+          <div id="sourceChoices" class="choices"></div>
+          <div class="field-label">Take me there</div>
+          <div id="ctaChoices" class="choices"></div>
+        </div>
+      </details>
+
+      <details class="section">
+        <summary><span class="title"><strong>Icons</strong><small>Assistant mark</small></span><span class="chev">›</span></summary>
+        <div class="section-body"><div id="iconChoices" class="choices"></div></div>
+      </details>
+
+      <details class="section" open>
+        <summary><span class="title"><strong>Colors</strong><small>Palette tokens</small></span><span class="chev">›</span></summary>
+        <div class="section-body">
+          <div class="color-row">
+            <label class="field">Primary<input id="primaryColor" type="color" /></label>
+            <label class="field">Surface<input id="surfaceColor" type="color" /></label>
+            <label class="field">Background<input id="backgroundColor" type="color" /></label>
+          </div>
+          <div class="color-row">
+            <label class="field">Text<input id="textColor" type="color" /></label>
+            <label class="field">Muted<input id="mutedColor" type="color" /></label>
+            <label class="field">Border<input id="borderColor" type="color" /></label>
+          </div>
+          <div id="themeChoices" class="choices"></div>
+        </div>
+      </details>
+
+      <details class="section">
+        <summary><span class="title"><strong>Typography</strong><small>Scale &amp; density</small></span><span class="chev">›</span></summary>
+        <div class="section-body">
+          <label class="field">Font scale
+            <input id="fontScaleRange" type="range" min="0.9" max="1.12" step="0.01" />
+            <span class="range-meta"><span>Compact</span><b id="fontScaleValue">1.00</b><span>Large</span></span>
+          </label>
+          <label class="field">Density
+            <select id="densitySelect">
+              <option value="compact">Compact</option>
+              <option value="comfortable">Comfortable</option>
+              <option value="spacious">Spacious</option>
             </select>
           </label>
-          <label>Launcher position
+        </div>
+      </details>
+
+      <details class="section">
+        <summary><span class="title"><strong>Layout</strong><small>Size, radius, position</small></span><span class="chev">›</span></summary>
+        <div class="section-body">
+          <label class="field">Width<input id="widthRange" type="range" min="320" max="520" step="4" /></label>
+          <label class="field">Height<input id="heightRange" type="range" min="440" max="760" step="4" /></label>
+          <div class="control-grid two">
+            <label class="field">Radius
+              <select id="radiusSelect">
+                <option value="sm">Small</option><option value="md">Medium</option>
+                <option value="lg">Large</option><option value="xl">Extra large</option>
+              </select>
+            </label>
+            <label class="field">Launcher size
+              <select id="launcherSizeSelect">
+                <option value="sm">Small</option><option value="md">Medium</option><option value="lg">Large</option>
+              </select>
+            </label>
+          </div>
+          <label class="field">Launcher position
             <select id="positionSelect">
-              <option value="bottom-right">Bottom right</option>
               <option value="bottom-left">Bottom left</option>
-              <option value="right-edge">Right edge</option>
+              <option value="bottom-right">Bottom right</option>
               <option value="left-edge">Left edge</option>
+              <option value="right-edge">Right edge</option>
             </select>
           </label>
         </div>
-      </section>
+      </details>
 
-      <section class="section">
-        <div class="section-head"><strong>Site Style</strong><span class="hint">Safe metadata only</span></div>
-        <div id="profileBox" class="profile-box"></div>
-        <div style="height:10px"></div>
-        <div class="actions">
-          <button id="detectBtn" class="secondary" type="button">Detect Style</button>
-          <button id="applyDetectedBtn" class="secondary" type="button">Apply Palette</button>
-          <button id="matchBtn" class="primary" type="button">Match This Site</button>
-          <button id="resetBtn" class="secondary" type="button">Reset</button>
-          <button id="removeBtn" class="danger" type="button">Remove Widget</button>
+      <details class="section">
+        <summary><span class="title"><strong>Effects</strong><small>Shadow depth</small></span><span class="chev">›</span></summary>
+        <div class="section-body">
+          <label class="field">Shadow strength
+            <input id="shadowRange" type="range" min="0" max="1" step="0.01" />
+            <span class="range-meta"><span>Flat</span><b id="shadowValue">0.38</b><span>Deep</span></span>
+          </label>
         </div>
-      </section>
+      </details>
+
+      <details class="section">
+        <summary><span class="title"><strong>AI Designer</strong><small>Describe → apply with AI</small></span><span class="chev">›</span></summary>
+        <div class="section-body">
+          <div class="ai-box">
+            <span class="pill-tag">AI Designer (DESIGN)</span>
+            <p>Describe the launcher, window, and style — the copilot converts it into real catalog settings applied live.</p>
+          </div>
+          <textarea id="designPrompt" placeholder="Example: make it a clean white university-style widget with a rounded send button"></textarea>
+          <div class="actions">
+            <button id="designApplyBtn" class="btn primary" type="button">Apply with AI</button>
+            <button id="designExampleBtn" class="btn" type="button">Load example</button>
+          </div>
+          <div id="designSummary" class="profile-box"></div>
+        </div>
+      </details>
+
+      <details class="section">
+        <summary><span class="title"><strong>Templates</strong><small>Complete assistant presets</small></span><span class="chev">›</span></summary>
+        <div class="section-body"><div id="presetChoices" class="choices"></div></div>
+      </details>
+
+      <details class="section">
+        <summary><span class="title"><strong>Advanced</strong><small>Reset, export, remove</small></span><span class="chev">›</span></summary>
+        <div class="section-body">
+          <div class="actions">
+            <button id="exportBtn" class="btn" type="button">Export JSON</button>
+            <button id="resetBtn" class="btn" type="button">Reset this site</button>
+            <button id="removeBtn" class="btn danger" type="button">Remove widget</button>
+          </div>
+        </div>
+      </details>
+
+      <div id="buildInfo" class="build-info">Build: loading…</div>
     </main>
     <script type="module" src="sidepanel.js"></script>
   </body>
