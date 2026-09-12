@@ -1,6 +1,7 @@
-// Build-time injected information. Popped by scripts/build-extension.mjs
+// Placeholder overwritten at build time by scripts/build-extension.mjs
+// with REAL literal git/build values. Never edit release values here.
 export const BUILD_INFO = {
-  branch: process.env.BUILD_BRANCH || 'unknown',
-  sha: process.env.BUILD_SHA || 'unknown',
-  id: process.env.BUILD_ID || 'dev',
+  branch: 'unbuilt',
+  sha: 'unbuilt',
+  id: 'unbuilt',
 };

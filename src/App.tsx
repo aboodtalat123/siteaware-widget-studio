@@ -29,9 +29,27 @@ import {
   type WebsiteStyleSnapshot,
   type GeneratedThemeRecommendation,
 } from './themeIntelligence';
+import { UnifiedSiteAwareExtensionAdapter } from './studio/adapters/UnifiedSiteAwareExtensionAdapter';
+
+type AppProps = {
+  adapter?: typeof UnifiedSiteAwareExtensionAdapter;
+};
 
 type PreviewMode = 'build' | 'preview' | 'test';
-type StudioMode = PreviewMode | 'auto-match' | 'design';
+type StudioMode = 
+  | 'build'
+  | 'design' 
+  | 'preview' 
+  | 'test' 
+  | 'auto-match'
+  | 'overview'
+  | 'application' 
+  | 'learn' 
+  | 'brain' 
+  | 'knowledge' 
+  | 'test' 
+  | 'assist' 
+  | 'settings';
 type ViewMode = 'desktop' | 'tablet' | 'mobile';
 type UILocale = 'en' | 'ar';
 type ThemeMode = 'light' | 'dark';
@@ -393,7 +411,412 @@ function getCollection(category: StudioCategory): VariantItem[] {
   }
 }
 
-function App() {
+type OwnerPanelProps = {
+  mode: string;
+  locale: UILocale;
+  ownerLoading: boolean;
+  ownerError: string;
+  ownerCaps: Record<string, any> | null;
+  ownerProfile: Record<string, any> | null;
+  ownerReadiness: Record<string, any> | null;
+  ownerPage: Record<string, any> | null;
+  ownerMap: Record<string, any> | null;
+  ownerAppearance: Record<string, any> | null;
+  learnSession: Record<string, any> | null;
+  appName: string;
+  setAppName: (v: string) => void;
+  appUrl: string;
+  setAppUrl: (v: string) => void;
+  appOrigin: string;
+  setAppOrigin: (v: string) => void;
+  appScope: string;
+  setAppScope: (v: string) => void;
+  appLang: string;
+  setAppLang: (v: string) => void;
+  appBudget: number;
+  setAppBudget: (v: number) => void;
+  appAdded: boolean;
+  setAppAdded: (v: boolean) => void;
+  designProfile: Record<string, any> | null;
+  mgmtKey: string;
+  setMgmtKey: (v: string) => void;
+  testQuestion: string;
+  setTestQuestion: (v: string) => void;
+  testResult: Record<string, any> | null;
+  testStructuralId: string;
+  testHighlightOk: boolean | null;
+  testVerify: Record<string, any> | null;
+  assistInput: string;
+  setAssistInput: (v: string) => void;
+  assistLog: Array<{ role: 'user' | 'assistant'; text: string }>;
+  fmtOwner: (v: unknown) => string;
+  onRefresh: () => void;
+  onStartLearn: () => void;
+  onLearnAction: (a: 'pause' | 'resume' | 'stop') => void;
+  onLearnPass: () => void;
+  onDetectDesign: () => void;
+  onAutoMatch: () => void;
+  onSaveAppearance: () => void;
+  onTestResolve: () => void;
+  onTestHighlight: () => void;
+  onTestVerify: () => void;
+  onAssistSend: () => void;
+};
+
+function OwnerRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="analysis-card">
+      <strong>{label}</strong>
+      <span>{value}</span>
+    </div>
+  );
+}
+
+function OwnerPanel(props: OwnerPanelProps) {
+  const { mode, locale } = props;
+  const ar = locale === 'ar';
+  const title: Record<string, [string, string, string]> = {
+    overview: [ar ? 'نظرة عامة' : 'Overview', ar ? 'قيم حقيقية من الخلفية' : 'Real backend values', 'overview'],
+    application: [ar ? 'التطبيق' : 'Application', ar ? 'إعداد حقيقي' : 'Real onboarding', 'application'],
+    learn: [ar ? 'التعلم' : 'Learn', ar ? 'جلسات حقيقية' : 'Real sessions', 'learn'],
+    brain: [ar ? 'الدماغ' : 'Brain', ar ? 'خريطة التطبيق' : 'Application map', 'brain'],
+    knowledge: [ar ? 'المعرفة' : 'Knowledge', ar ? 'مصادر حقيقية' : 'Real sources', 'knowledge'],
+    test: [ar ? 'الاختبار 5C/5D/5E' : 'Test 5C / 5D / 5E', ar ? 'تحقق حقيقي' : 'Real verification', 'test'],
+    assist: [ar ? 'المساعد' : 'Assist', ar ? 'إجابات موثقة' : 'Grounded answers', 'assist'],
+    settings: [ar ? 'الإعدادات' : 'Settings', ar ? 'المظهر والوضع' : 'Appearance and mode', 'settings'],
+  };
+  const [heading, sub] = title[mode] ?? [mode, ''];
+  const map = props.ownerMap as any;
+  const caps = props.ownerCaps as any;
+
+  return (
+    <>
+      <section className="panel-section sticky">
+        <div className="panel-heading">
+          <h2>{heading}</h2>
+          <span>{sub}</span>
+        </div>
+        <p className="copilot-intro">
+          {ar
+            ? 'GUIDE ONLY — المرحلة 6 مغلقة. القيم الحقيقية فقط، وغير المتاح يظهر صراحة.'
+            : 'GUIDE ONLY — Stage 6 OFF. Real values only; unavailable is shown explicitly.'}
+        </p>
+        <div className="auto-actions">
+          <button className="primary-button" onClick={props.onRefresh} type="button" disabled={props.ownerLoading}>
+            {props.ownerLoading ? (ar ? 'جاري التحديث...' : 'Refreshing...') : ar ? 'تحديث البيانات' : 'Refresh data'}
+          </button>
+        </div>
+        {props.ownerError ? (
+          <div className="copilot-result-card error">
+            <strong>{ar ? 'غير متاح' : 'Unavailable'}</strong>
+            <p>{props.ownerError}</p>
+          </div>
+        ) : null}
+      </section>
+
+      {mode === 'overview' ? (
+        <section className="panel-section">
+          <div className="panel-heading">
+            <h2>{ar ? 'حالة التطبيق' : 'Application state'}</h2>
+            <span>{ar ? 'من الخلفية' : 'From backend'}</span>
+          </div>
+          <div className="copilot-insight-list">
+            <OwnerRow label={ar ? 'التطبيق' : 'Application'} value={props.fmtOwner(props.ownerProfile?.site_id ?? props.appName)} />
+            <OwnerRow label="Origin" value={props.fmtOwner(props.ownerProfile?.origin ?? props.appOrigin)} />
+            <OwnerRow label={ar ? 'الصفحة الحالية' : 'Current page'} value={props.fmtOwner(props.ownerPage?.path ?? props.ownerPage?.url)} />
+            <OwnerRow label={ar ? 'النطاق' : 'Access scope'} value={props.fmtOwner(props.ownerProfile?.access_scope ?? props.appScope)} />
+            <OwnerRow label={ar ? 'الجاهزية' : 'Readiness'} value={props.fmtOwner(props.ownerReadiness?.state)} />
+            <OwnerRow label={ar ? 'حالة التعلم' : 'Learning state'} value={props.fmtOwner((props.learnSession as any)?.state ?? map?.state)} />
+            <OwnerRow label={ar ? 'الصفحات المرصودة' : 'Pages observed'} value={props.fmtOwner(map?.pages_observed)} />
+            <OwnerRow label={ar ? 'العقد / الروابط' : 'Graph nodes / edges'} value={`${props.fmtOwner(map?.graph_nodes)} / ${props.fmtOwner(map?.graph_edges)}`} />
+            <OwnerRow label="Auto Knowledge" value={props.fmtOwner(map?.auto_knowledge_sources)} />
+            <OwnerRow label="Customer Knowledge" value={props.fmtOwner(map?.customer_knowledge_sources)} />
+            <OwnerRow label={ar ? 'المظهر' : 'Appearance'} value={props.ownerAppearance ? (ar ? 'مكوّن' : 'Configured') : 'UNAVAILABLE / NOT LEARNED'} />
+            <OwnerRow label="Stage 6" value={caps ? `GUIDE ONLY (stage6=${String(caps.stage6)})` : 'GUIDE ONLY'} />
+          </div>
+        </section>
+      ) : null}
+
+      {mode === 'application' ? (
+        <>
+          <section className="panel-section">
+            <div className="panel-heading">
+              <h2>{ar ? 'إضافة تطبيق' : 'Add application'}</h2>
+              <span>{ar ? 'بدون بيانات حساسة' : 'No sensitive data'}</span>
+            </div>
+            <div className="settings-grid">
+              <label>
+                {ar ? 'اسم التطبيق' : 'Application Name'}
+                <input className="search-input" value={props.appName} onChange={(e) => props.setAppName(e.target.value)} />
+              </label>
+              <label>
+                {ar ? 'رابط التطبيق' : 'Application URL'}
+                <input className="search-input" value={props.appUrl} onChange={(e) => props.setAppUrl(e.target.value)} />
+              </label>
+              <label>
+                {ar ? 'الأصل المسموح' : 'Allowed Origin'}
+                <input className="search-input" value={props.appOrigin} onChange={(e) => props.setAppOrigin(e.target.value)} />
+              </label>
+              <label>
+                {ar ? 'نطاق التعلم' : 'Learning Scope'}
+                <select className="search-input" value={props.appScope} onChange={(e) => props.setAppScope(e.target.value)}>
+                  <option value="PUBLIC">PUBLIC</option>
+                  <option value="AUTHENTICATED">AUTHENTICATED</option>
+                </select>
+              </label>
+              <label>
+                {ar ? 'اللغة' : 'Language'}
+                <select className="search-input" value={props.appLang} onChange={(e) => props.setAppLang(e.target.value)}>
+                  <option value="AUTO">AUTO</option>
+                  <option value="AR">AR</option>
+                  <option value="EN">EN</option>
+                </select>
+              </label>
+              <label>
+                {ar ? 'ميزانية التعلم' : 'Learning budget'}
+                <input className="search-input" type="number" min={1} max={25} value={props.appBudget} onChange={(e) => props.setAppBudget(Number(e.target.value))} />
+              </label>
+            </div>
+            <div className="auto-actions">
+              <button className="primary-button" type="button" onClick={() => props.setAppAdded(true)}>
+                {ar ? 'إضافة التطبيق' : 'ADD APPLICATION'}
+              </button>
+            </div>
+          </section>
+          <section className="panel-section">
+            <div className="panel-heading">
+              <h2>{ar ? 'التحقق من الجاهزية' : 'Readiness check'}</h2>
+              <span>{ar ? 'تسجيل دخول يدوي' : 'Manual login'}</span>
+            </div>
+            <p className="copilot-intro">
+              {ar
+                ? 'افتح التطبيق في التبويب النشط وسجل الدخول بنفسك، ثم اضغط تحقق. لا نطلب اسم مستخدم أو كلمة مرور أو رموز.'
+                : 'Open the application in the active tab and log in yourself, then verify. We never ask for username, password, or tokens.'}
+            </p>
+            <div className="auto-actions">
+              <button className="secondary-button" type="button" onClick={() => window.open(props.appUrl, '_blank')}>
+                {ar ? 'فتح التطبيق' : 'OPEN APPLICATION'}
+              </button>
+              <button className="primary-button" type="button" onClick={props.onRefresh}>
+                {ar ? 'لقد سجلت الدخول — تحقق' : 'I HAVE LOGGED IN — verify'}
+              </button>
+            </div>
+            {props.appAdded ? (
+              <div className="copilot-insight-list">
+                <OwnerRow label={ar ? 'تطابق الأصل' : 'Origin match'} value={props.fmtOwner(props.ownerReadiness?.inScope ? 'MATCH' : 'MISMATCH')} />
+                <OwnerRow label={ar ? 'التبويب متصل' : 'Tab connected'} value={props.fmtOwner(props.ownerPage?.url ? 'CONNECTED' : 'NOT CONNECTED')} />
+                <OwnerRow label={ar ? 'سياق مصادق' : 'Authenticated context'} value={props.fmtOwner(props.ownerReadiness?.state)} />
+                <OwnerRow label={ar ? 'الصفحة الآمنة الحالية' : 'Current safe page'} value={props.fmtOwner(props.ownerPage?.path)} />
+                <OwnerRow label={ar ? 'هوية التطبيق' : 'Application identity'} value={props.fmtOwner(props.ownerProfile?.site_id)} />
+              </div>
+            ) : null}
+          </section>
+        </>
+      ) : null}
+
+      {mode === 'learn' ? (
+        <section className="panel-section">
+          <div className="panel-heading">
+            <h2>{ar ? 'التعلم التفاعلي' : 'Interactive learning'}</h2>
+            <span>{ar ? 'مراقبة آمنة فقط' : 'Safe observation only'}</span>
+          </div>
+          <div className="auto-actions">
+            <button className="primary-button" type="button" onClick={props.onStartLearn} disabled={props.ownerLoading}>
+              {ar ? 'بدء التعلم' : 'START LEARN'}
+            </button>
+            <button className="secondary-button" type="button" onClick={() => props.onLearnAction('pause')}>
+              {ar ? 'إيقاف مؤقت' : 'PAUSE'}
+            </button>
+            <button className="secondary-button" type="button" onClick={() => props.onLearnAction('resume')}>
+              {ar ? 'استئناف' : 'RESUME'}
+            </button>
+            <button className="secondary-button" type="button" onClick={() => props.onLearnAction('stop')}>
+              {ar ? 'إيقاف' : 'STOP'}
+            </button>
+            <button className="secondary-button" type="button" onClick={props.onLearnPass} disabled={props.ownerLoading}>
+              {ar ? 'تمريرة تعلم واحدة' : 'Single learn pass'}
+            </button>
+          </div>
+          <div className="copilot-insight-list">
+            <OwnerRow label={ar ? 'الجلسة' : 'Session'} value={props.fmtOwner((props.learnSession as any)?.session_id)} />
+            <OwnerRow label={ar ? 'الحالة' : 'State'} value={props.fmtOwner((props.learnSession as any)?.state)} />
+            <OwnerRow label={ar ? 'المسار الحالي' : 'Current route'} value={props.fmtOwner((props.learnSession as any)?.current_item)} />
+            <OwnerRow label={ar ? 'الصفحات المرصودة' : 'Pages observed'} value={props.fmtOwner((props.learnSession as any)?.pages_observed)} />
+            <OwnerRow label={ar ? 'الحدود' : 'Frontier'} value={props.fmtOwner((props.learnSession as any)?.frontier_depth)} />
+            <OwnerRow label={ar ? 'العقد / الروابط' : 'Nodes / edges'} value={`${props.fmtOwner((props.learnSession as any)?.nodes_added)} / ${props.fmtOwner((props.learnSession as any)?.edges_added)}`} />
+            <OwnerRow label={ar ? 'تفاعلات آمنة' : 'Safe interactions'} value={props.fmtOwner((props.learnSession as any)?.interactions_explored)} />
+            <OwnerRow label={ar ? 'مرفوض' : 'Rejected'} value={props.fmtOwner((props.learnSession as any)?.rejected_routes)} />
+          </div>
+        </section>
+      ) : null}
+
+      {mode === 'brain' ? (
+        <section className="panel-section">
+          <div className="panel-heading">
+            <h2>{ar ? 'خريطة التطبيق' : 'Application map'}</h2>
+            <span>{ar ? 'من الرسم البياني' : 'From graph'}</span>
+          </div>
+          <div className="copilot-insight-list">
+            <OwnerRow label={ar ? 'الحالة' : 'State'} value={props.fmtOwner(map?.state)} />
+            <OwnerRow label={ar ? 'الصفحات المرصودة' : 'Observed pages'} value={props.fmtOwner(map?.pages_observed)} />
+            <OwnerRow label={ar ? 'المسارات المعروفة' : 'Routes known'} value={props.fmtOwner(map?.routes_known)} />
+            <OwnerRow label={ar ? 'العقد' : 'Graph nodes'} value={props.fmtOwner(map?.graph_nodes)} />
+            <OwnerRow label={ar ? 'الروابط' : 'Graph edges'} value={props.fmtOwner(map?.graph_edges)} />
+            <OwnerRow label={ar ? 'الجلسات' : 'Sessions'} value={props.fmtOwner((map?.sessions || []).length)} />
+          </div>
+          <div className="panel-heading">
+            <h2>{ar ? 'المناطق المرصودة' : 'Observed areas'}</h2>
+            <span>{(map?.areas || []).length}</span>
+          </div>
+          <div className="copilot-insight-list">
+            {(map?.areas || []).length ? (
+              (map.areas as Array<{ entity_id: string; label_ar: string; label_en: string }>).map((area) => (
+                <div key={area.entity_id} className="analysis-card">
+                  <strong>{ar ? area.label_ar : area.label_en}</strong>
+                  <span>{`Status: VERIFIED / Scope: ${props.appScope} / id: ${area.entity_id}`}</span>
+                </div>
+              ))
+            ) : (
+              <div className="analysis-card">
+                <strong>{ar ? 'لا مناطق بعد' : 'No areas yet'}</strong>
+                <span>UNAVAILABLE / NOT LEARNED</span>
+              </div>
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      {mode === 'knowledge' ? (
+        <>
+          <section className="panel-section">
+            <div className="panel-heading">
+              <h2>AUTO KNOWLEDGE</h2>
+              <span>{props.fmtOwner(map?.auto_knowledge_sources)}</span>
+            </div>
+            <p className="copilot-intro">
+              {ar ? 'معرفة موثقة مولدة من أدلة مرصودة فقط.' : 'Grounded knowledge generated from observed evidence only.'}
+            </p>
+            <div className="copilot-insight-list">
+              <OwnerRow label="Auto sources" value={props.fmtOwner(map?.auto_knowledge_sources)} />
+            </div>
+          </section>
+          <section className="panel-section">
+            <div className="panel-heading">
+              <h2>CUSTOMER KNOWLEDGE</h2>
+              <span>{props.fmtOwner(map?.customer_knowledge_sources)}</span>
+            </div>
+            <p className="copilot-intro">
+              {ar ? 'معرفة المالك إن وجدت، وإلا عرض للقراءة فقط.' : 'Owner-added knowledge if present, otherwise read-only.'}
+            </p>
+            <div className="copilot-insight-list">
+              <OwnerRow label="Customer sources" value={props.fmtOwner(map?.customer_knowledge_sources)} />
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {mode === 'test' ? (
+        <section className="panel-section">
+          <div className="panel-heading">
+            <h2>{ar ? 'اختبار موجه' : 'Guided test'}</h2>
+            <span>5C / 5D / 5E</span>
+          </div>
+          <textarea
+            className="copilot-textarea"
+            rows={3}
+            value={props.testQuestion}
+            onChange={(e) => props.setTestQuestion(e.target.value)}
+            placeholder={ar ? 'اكتب سؤال المؤسس...' : 'Enter founder question...'}
+          />
+          <div className="auto-actions">
+            <button className="primary-button" type="button" onClick={props.onTestResolve} disabled={props.ownerLoading}>
+              5C RESOLVE
+            </button>
+            <button className="secondary-button" type="button" onClick={props.onTestHighlight}>
+              5D HIGHLIGHT
+            </button>
+            <button className="secondary-button" type="button" onClick={props.onTestVerify} disabled={props.ownerLoading}>
+              5E VERIFY
+            </button>
+          </div>
+          <div className="copilot-insight-list">
+            <OwnerRow label={ar ? 'الصفحة الحالية' : 'Current Page'} value={props.fmtOwner(props.ownerPage?.path)} />
+            <OwnerRow label={ar ? 'النطاق' : 'Access Scope'} value={props.fmtOwner(props.ownerProfile?.access_scope)} />
+            <OwnerRow label="Grounding" value={props.fmtOwner(props.testResult ? String((props.testResult as any)?.grounded) : '')} />
+            <OwnerRow label={ar ? 'الإجابة' : 'Answer'} value={props.fmtOwner((props.testResult as any)?.answer)} />
+            <OwnerRow label="Target identity" value={props.fmtOwner((props.testResult as any)?.guide?.target_identity || (props.testResult as any)?.target?.identity)} />
+            <OwnerRow label="Expected route" value={props.fmtOwner((props.testResult as any)?.guide?.expected_route || (props.testResult as any)?.verification?.expected_route)} />
+            <OwnerRow label="Structural id" value={props.fmtOwner(props.testStructuralId)} />
+            <OwnerRow label="5D highlight" value={props.testHighlightOk === null ? 'UNAVAILABLE / NOT LEARNED' : props.testHighlightOk ? 'HIGHLIGHTED (click manually)' : 'NOT HIGHLIGHTED'} />
+            <OwnerRow label="5E verdict" value={props.fmtOwner((props.testVerify as any)?.status ? `${(props.testVerify as any).status} / ${(props.testVerify as any).recovery}` : '')} />
+          </div>
+        </section>
+      ) : null}
+
+      {mode === 'assist' ? (
+        <section className="panel-section">
+          <div className="panel-heading">
+            <h2>{ar ? 'المساعد' : 'Assistant'}</h2>
+            <span>{ar ? 'بدون تشخيص' : 'No diagnostics'}</span>
+          </div>
+          <div className="conversation" aria-live="polite">
+            {props.assistLog.length ? (
+              props.assistLog.map((message, index) => (
+                <div key={index} className={message.role === 'user' ? 'message-row user-row' : 'message-row assistant-row'}>
+                  <div className={message.role === 'user' ? 'message-card user-message' : 'message-card assistant-message'}>
+                    <p>{message.text}</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="copilot-intro">{ar ? 'اسأل عن التطبيق، وستصلك إجابة موثقة.' : 'Ask about the application for a grounded answer.'}</p>
+            )}
+          </div>
+          <div className="composer widget-input">
+            <input value={props.assistInput} onChange={(e) => props.setAssistInput(e.target.value)} placeholder={ar ? 'اكتب سؤالك...' : 'Ask...'} />
+            <button className="send-button" type="button" onClick={props.onAssistSend}>
+              {ar ? 'إرسال' : 'Send'}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {mode === 'settings' ? (
+        <section className="panel-section">
+          <div className="panel-heading">
+            <h2>{ar ? 'المظهر' : 'Appearance'}</h2>
+            <span>v1</span>
+          </div>
+          <div className="settings-grid">
+            <label>
+              Management key (PUT only)
+              <input className="search-input" type="password" value={props.mgmtKey} onChange={(e) => props.setMgmtKey(e.target.value)} autoComplete="off" />
+            </label>
+          </div>
+          <div className="auto-actions">
+            <button className="secondary-button" type="button" onClick={props.onDetectDesign} disabled={props.ownerLoading}>
+              {ar ? 'كشف ستايل الموقع' : 'Detect Website'}
+            </button>
+            <button className="secondary-button" type="button" onClick={props.onAutoMatch}>
+              {ar ? 'مطابقة تلقائية' : 'Auto Match'}
+            </button>
+            <button className="primary-button" type="button" onClick={props.onSaveAppearance} disabled={props.ownerLoading}>
+              {ar ? 'حفظ المظهر' : 'Save Appearance'}
+            </button>
+          </div>
+          <div className="copilot-insight-list">
+            <OwnerRow label="Design profile" value={props.designProfile ? 'DETECTED' : 'UNAVAILABLE / NOT LEARNED'} />
+            <OwnerRow label="Appearance" value={props.fmtOwner(props.ownerAppearance ? 'CONFIGURED' : '')} />
+            <OwnerRow label="Stage 6" value="GUIDE ONLY / real_actions=false / actions=false" />
+          </div>
+        </section>
+      ) : null}
+    </>
+  );
+}
+
+function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
+  const ownerAdapter = adapter;
   const [config, setConfig] = useState<StudioConfig>(loadConfig);
   const [mode, setMode] = useState<StudioMode>('build');
   const [viewMode, setViewMode] = useState<ViewMode>('desktop');
@@ -427,6 +850,262 @@ function App() {
   const [styleAnalysis, setStyleAnalysis] = useState('');
   const [styleStatus, setStyleStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [styleReasoning, setStyleReasoning] = useState<string[]>([]);
+
+  // ---- REAL OWNER PRODUCT state (Unified adapter runtime, no mocks) ----
+  const [ownerLoading, setOwnerLoading] = useState(false);
+  const [ownerError, setOwnerError] = useState('');
+  const [ownerCaps, setOwnerCaps] = useState<Record<string, any> | null>(null);
+  const [ownerProfile, setOwnerProfile] = useState<Record<string, any> | null>(null);
+  const [ownerReadiness, setOwnerReadiness] = useState<Record<string, any> | null>(null);
+  const [ownerPage, setOwnerPage] = useState<Record<string, any> | null>(null);
+  const [ownerMap, setOwnerMap] = useState<Record<string, any> | null>(null);
+  const [ownerAppearance, setOwnerAppearance] = useState<Record<string, any> | null>(null);
+  const [learnSession, setLearnSession] = useState<Record<string, any> | null>(null);
+  const [appName, setAppName] = useState('Rousheta');
+  const [appUrl, setAppUrl] = useState('https://rousheta.net');
+  const [appOrigin, setAppOrigin] = useState('https://rousheta.net');
+  const [appScope, setAppScope] = useState('AUTHENTICATED');
+  const [appLang, setAppLang] = useState('AUTO');
+  const [appBudget, setAppBudget] = useState(25);
+  const [appAdded, setAppAdded] = useState(false);
+  const [testQuestion, setTestQuestion] = useState('');
+  const [testResult, setTestResult] = useState<Record<string, any> | null>(null);
+  const [testStructuralId, setTestStructuralId] = useState('');
+  const [testHighlightOk, setTestHighlightOk] = useState<boolean | null>(null);
+  const [testVerify, setTestVerify] = useState<Record<string, any> | null>(null);
+  const [assistInput, setAssistInput] = useState('');
+  const [assistLog, setAssistLog] = useState<Array<{ role: 'user' | 'assistant'; text: string }>>([]);
+  const [designProfile, setDesignProfile] = useState<Record<string, any> | null>(null);
+  const [mgmtKey, setMgmtKey] = useState('');
+
+  function ownerFail(error: unknown) {
+    const message = error instanceof Error ? error.message : 'UNAVAILABLE:UNKNOWN';
+    setOwnerError(message);
+  }
+
+  function fmtOwner(value: unknown): string {
+    if (value === null || value === undefined || value === '') return 'UNAVAILABLE / NOT LEARNED';
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
+  }
+
+  async function refreshOwnerContext() {
+    setOwnerLoading(true);
+    setOwnerError('');
+    try {
+      const [caps, profile, readiness, page, map, appearance] = await Promise.all([
+        ownerAdapter.getCapabilities().catch((e) => { throw e; }),
+        ownerAdapter.getSiteProfile().catch(() => null),
+        ownerAdapter.getReadiness().catch(() => null),
+        ownerAdapter.getCurrentPage().catch(() => null),
+        ownerAdapter.getBrainMap().catch(() => null),
+        ownerAdapter.getAppearance('local').catch(() => null),
+      ]);
+      setOwnerCaps(caps as any);
+      setOwnerProfile(profile as any);
+      setOwnerReadiness(readiness as any);
+      setOwnerPage(page as any);
+      setOwnerMap(map as any);
+      setOwnerAppearance(appearance as any);
+    } catch (error) {
+      ownerFail(error);
+    } finally {
+      setOwnerLoading(false);
+    }
+  }
+
+  async function handleStartLearn() {
+    setOwnerLoading(true);
+    setOwnerError('');
+    try {
+      const session = await ownerAdapter.startLearning({
+        start_route: (ownerProfile as any)?.start_route ?? '/ar/clinic/dashboard',
+        max_unique_pages: appBudget,
+        max_depth: 3,
+      });
+      setLearnSession(session as any);
+    } catch (error) {
+      ownerFail(error);
+    } finally {
+      setOwnerLoading(false);
+    }
+  }
+
+  async function handleLearnAction(action: 'pause' | 'resume' | 'stop') {
+    const sessionId = (learnSession as any)?.session_id;
+    if (!sessionId) {
+      setOwnerError('UNAVAILABLE:NO_LEARNING_SESSION');
+      return;
+    }
+    setOwnerLoading(true);
+    setOwnerError('');
+    try {
+      if (action === 'pause') setLearnSession((await ownerAdapter.pauseLearning(sessionId)) as any);
+      if (action === 'resume') setLearnSession((await ownerAdapter.resumeLearning(sessionId)) as any);
+      if (action === 'stop') setLearnSession((await ownerAdapter.stopLearning(sessionId)) as any);
+    } catch (error) {
+      ownerFail(error);
+    } finally {
+      setOwnerLoading(false);
+    }
+  }
+
+  async function handleLearnPassOnce() {
+    setOwnerLoading(true);
+    setOwnerError('');
+    try {
+      const sessionId = (learnSession as any)?.session_id;
+      if (!sessionId) throw new Error('UNAVAILABLE:NO_LEARNING_SESSION');
+      const session = await ownerAdapter.getLearningProgress(sessionId).catch(() => learnSession);
+      const nextRoute = (session as any)?.current_item || (ownerProfile as any)?.start_route || '/ar/clinic/dashboard';
+      const origin = (ownerProfile as any)?.origin || 'https://rousheta.net';
+      const pass = await ownerAdapter.requestLearnPass({ origin, routes: [nextRoute], maxPages: 1 });
+      for (const visit of pass.visited || []) {
+        if (visit.observation) {
+          await ownerAdapter.ingestObservation(sessionId, visit.observation, visit.route).catch(() => null);
+        }
+      }
+      setLearnSession((await ownerAdapter.getLearningProgress(sessionId).catch(() => session)) as any);
+      await refreshOwnerContext().catch(() => null);
+    } catch (error) {
+      ownerFail(error);
+    } finally {
+      setOwnerLoading(false);
+    }
+  }
+
+  async function handleDetectDesign() {
+    setOwnerLoading(true);
+    setOwnerError('');
+    try {
+      const profile = await ownerAdapter.getDesignProfile();
+      setDesignProfile(profile as any);
+    } catch (error) {
+      ownerFail(error);
+    } finally {
+      setOwnerLoading(false);
+    }
+  }
+
+  function handleAutoMatchApply() {
+    setOwnerError('');
+    try {
+      if (!designProfile) throw new Error('UNAVAILABLE:NO_DESIGN_PROFILE');
+      const appearance = ownerAdapter.autoMatch(designProfile);
+      setOwnerAppearance(appearance);
+      setConfig((previous) => ({
+        ...previous,
+        appearance: {
+          ...previous.appearance,
+          primaryColor: (appearance.primary_color as string) ?? previous.appearance.primaryColor,
+          widgetWidth: (appearance.panel_width_px as number) ?? previous.appearance.widgetWidth,
+          widgetHeight: (appearance.panel_height_px as number) ?? previous.appearance.widgetHeight,
+        },
+      }));
+    } catch (error) {
+      ownerFail(error);
+    }
+  }
+
+  async function handleSaveAppearance() {
+    setOwnerLoading(true);
+    setOwnerError('');
+    try {
+      const saved = await ownerAdapter.saveAppearance(
+        {
+          theme: 'light',
+          primary_color: config.appearance.primaryColor,
+          radius_px: { sm: 10, md: 14, lg: 20, xl: 26 }[config.appearance.radius] ?? 12,
+          panel_width_px: config.appearance.widgetWidth,
+          panel_height_px: config.appearance.widgetHeight,
+          direction: locale === 'ar' ? 'rtl' : 'ltr',
+          locale,
+        },
+        'local',
+        mgmtKey,
+      );
+      setOwnerAppearance(saved as any);
+    } catch (error) {
+      ownerFail(error);
+    } finally {
+      setOwnerLoading(false);
+    }
+  }
+
+  async function handleTestResolve() {
+    setOwnerLoading(true);
+    setOwnerError('');
+    setTestVerify(null);
+    setTestHighlightOk(null);
+    try {
+      if (!testQuestion.trim()) throw new Error('UNAVAILABLE:EMPTY_QUESTION');
+      const result = await ownerAdapter.askAssist(testQuestion.trim(), locale);
+      setTestResult(result as any);
+      const identity = (result as any)?.guide?.target_identity || (result as any)?.target?.identity || '';
+      if (identity) {
+        const structuralId = await ownerAdapter.resolveStructuralId(identity).catch(() => '');
+        setTestStructuralId(structuralId);
+      } else {
+        setTestStructuralId('');
+      }
+    } catch (error) {
+      ownerFail(error);
+    } finally {
+      setOwnerLoading(false);
+    }
+  }
+
+  async function handleTestHighlight() {
+    setOwnerError('');
+    try {
+      if (!testStructuralId) throw new Error('UNAVAILABLE:NO_RESOLVED_TARGET');
+      const ok = await ownerAdapter.highlightTarget(testStructuralId);
+      setTestHighlightOk(ok);
+    } catch (error) {
+      ownerFail(error);
+    }
+  }
+
+  async function handleTestVerify() {
+    setOwnerLoading(true);
+    setOwnerError('');
+    try {
+      const expected = (testResult as any)?.guide?.expected_route || (testResult as any)?.verification?.expected_route || '';
+      if (!expected) throw new Error('UNAVAILABLE:NO_EXPECTED_ROUTE');
+      const observation = await ownerAdapter.observeActiveTab().catch(() => null);
+      const observedTemplate = (observation as any)?.route_template || (observation as any)?.url || ownerPage?.path || '';
+      const observedUrl = (observation as any)?.url || ownerPage?.url || '';
+      const verdict = await ownerAdapter.verifyArrival({
+        expected_route: expected,
+        observed_route_template: observedTemplate,
+        observed_url: observedUrl,
+        session_id: (learnSession as any)?.session_id || undefined,
+      });
+      setTestVerify(verdict as any);
+    } catch (error) {
+      ownerFail(error);
+    } finally {
+      setOwnerLoading(false);
+    }
+  }
+
+  async function handleAssistSend() {
+    if (!assistInput.trim()) return;
+    const question = assistInput.trim();
+    setAssistInput('');
+    setAssistLog((previous) => [...previous, { role: 'user', text: question }]);
+    try {
+      const result = await ownerAdapter.askAssist(question, locale);
+      setAssistLog((previous) => [...previous, { role: 'assistant', text: (result as any)?.answer || 'UNAVAILABLE / NOT LEARNED' }]);
+      const identity = (result as any)?.guide?.target_identity;
+      if (identity) {
+        const structuralId = await ownerAdapter.resolveStructuralId(identity).catch(() => '');
+        if (structuralId) await ownerAdapter.highlightTarget(structuralId).catch(() => null);
+      }
+    } catch {
+      setAssistLog((previous) => [...previous, { role: 'assistant', text: 'UNAVAILABLE / NOT LEARNED' }]);
+    }
+  }
 
   useEffect(() => {
     storeConfig(config);
@@ -1097,8 +1776,8 @@ function App() {
         : 'Gemini connected'
       : apiHealth?.mode === 'missing_key'
         ? locale === 'ar'
-          ? 'Gemini غير متصل · أضف GEMINI_API_KEY'
-          : 'Gemini disconnected · add GEMINI_API_KEY'
+          ? 'Gemini غير متصل · أضف المفتاح'
+          : 'Gemini disconnected · add API key'
         : locale === 'ar'
           ? 'Gemini غير متاح'
           : 'Gemini unavailable';
@@ -1168,17 +1847,11 @@ function App() {
 
       <section className="mode-strip panel">
         <div className="mode-buttons">
-          {(['build', 'design', 'preview', 'test', 'auto-match'] as const).map((item) => (
+          {(['build', 'design', 'preview', 'test', 'auto-match', 'overview', 'application', 'learn', 'brain', 'knowledge', 'assist', 'settings'] as const).map((item) => (
             <button
               key={item}
               className={classNames('mode-pill', mode === item && 'active')}
-              onClick={() => {
-                setMode(item);
-                if (item === 'preview' || item === 'test') {
-                  setViewMode('desktop');
-                  setWidgetOpen(true);
-                }
-              }}
+              onClick={() => setMode(item)}
             >
               {item === 'build'
                 ? locale === 'ar'
@@ -1192,11 +1865,43 @@ function App() {
                   ? locale === 'ar'
                     ? 'الموقع الحي'
                     : 'Live Website'
-                  : item === 'test'
+                : item === 'test'
+                  ? locale === 'ar'
+                    ? 'تجربة'
+                    : 'Test Experience'
+                  : item === 'auto-match'
                     ? locale === 'ar'
-                      ? 'تجربة'
-                      : 'Test Experience'
-                    : 'AUTO MATCH'}
+                      ? 'ضبط أوتوماتيكي'
+                      : 'AUTO MATCH'
+                    : item === 'overview'
+                      ? locale === 'ar'
+                        ? 'نظرة عامة'
+                        : 'Overview'
+                      : item === 'application'
+                        ? locale === 'ar'
+                          ? 'الApplication'
+                          : 'Application'
+                        : item === 'learn'
+                          ? locale === 'ar'
+                            ? 'تعلم'
+                            : 'Learn'
+                          : item === 'brain'
+                            ? locale === 'ar'
+                              ? 'دماغ'
+                              : 'Brain'
+                            : item === 'knowledge'
+                              ? locale === 'ar'
+                                ? 'معرفة'
+                                : 'Knowledge'
+                              : item === 'assist'
+                                ? locale === 'ar'
+                                  ? 'مساعد'
+                                  : 'Assist'
+                                : item === 'settings'
+                                  ? locale === 'ar'
+                                    ? 'إعدادات'
+                                    : 'Settings'
+                                  : ''}
             </button>
           ))}
         </div>
@@ -1208,7 +1913,59 @@ function App() {
 
       <main className="studio-grid">
         <aside className="panel left-rail">
-          {mode === 'auto-match' ? (
+          {['overview', 'application', 'learn', 'brain', 'knowledge', 'test', 'assist', 'settings'].includes(mode) ? (
+            <OwnerPanel
+              mode={mode}
+              locale={locale}
+              ownerLoading={ownerLoading}
+              ownerError={ownerError}
+              ownerCaps={ownerCaps}
+              ownerProfile={ownerProfile}
+              ownerReadiness={ownerReadiness}
+              ownerPage={ownerPage}
+              ownerMap={ownerMap}
+              ownerAppearance={ownerAppearance}
+              learnSession={learnSession}
+              appName={appName}
+              setAppName={setAppName}
+              appUrl={appUrl}
+              setAppUrl={setAppUrl}
+              appOrigin={appOrigin}
+              setAppOrigin={setAppOrigin}
+              appScope={appScope}
+              setAppScope={setAppScope}
+              appLang={appLang}
+              setAppLang={setAppLang}
+              appBudget={appBudget}
+              setAppBudget={setAppBudget}
+              appAdded={appAdded}
+              setAppAdded={setAppAdded}
+              designProfile={designProfile}
+              mgmtKey={mgmtKey}
+              setMgmtKey={setMgmtKey}
+              testQuestion={testQuestion}
+              setTestQuestion={setTestQuestion}
+              testResult={testResult}
+              testStructuralId={testStructuralId}
+              testHighlightOk={testHighlightOk}
+              testVerify={testVerify}
+              assistInput={assistInput}
+              setAssistInput={setAssistInput}
+              assistLog={assistLog}
+              fmtOwner={fmtOwner}
+              onRefresh={refreshOwnerContext}
+              onStartLearn={handleStartLearn}
+              onLearnAction={handleLearnAction}
+              onLearnPass={handleLearnPassOnce}
+              onDetectDesign={handleDetectDesign}
+              onAutoMatch={handleAutoMatchApply}
+              onSaveAppearance={handleSaveAppearance}
+              onTestResolve={handleTestResolve}
+              onTestHighlight={handleTestHighlight}
+              onTestVerify={handleTestVerify}
+              onAssistSend={handleAssistSend}
+            />
+          ) : mode === 'auto-match' ? (
             <AutoMatchPanel onApplyTheme={applyGeneratedTheme} currentPrimaryColor={config.appearance.primaryColor} />
           ) : mode === 'design' ? (
             <>

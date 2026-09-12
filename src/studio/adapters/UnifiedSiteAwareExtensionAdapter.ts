@@ -1,0 +1,472 @@
+/**
+ * UnifiedSiteAwareExtensionAdapter — REAL thin client over the SiteAware
+ * local-integration contracts (GUIDE ONLY, Stage 6 OFF).
+ *
+ * Backend authority (see siteaware-local-integration):
+ * - app/integration/routes.py — learning-sessions, observations, query, verify,
+ *   appearance, site-profile, application-map, capabilities
+ * - docs/integration/extension-runtime-contract.md — message protocol + HTTP table
+ * - docs/architecture/siteaware-unified-client-contract.md — ownership boundaries
+ *
+ * Browser ownership: tabs, safe DOM observation, navigation, highlight.
+ * This adapter never invents values: unavailable backend/session/tab
+ * surfaces as thrown Error('UNAVAILABLE:...') so React shows UNAVAILABLE.
+ */
+
+const BACKEND_BASE = 'http://127.0.0.1:8000';
+const TOKEN_STORAGE_KEY = 'siteaware.local.dev.session';
+const APPROVED_ORIGINS = ['https://rousheta.net'];
+
+declare const chrome: any;
+
+// ---------- transport primitives ----------
+
+function originOf(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return /^https?:$/.test(parsed.protocol) ? parsed.origin : '';
+  } catch {
+    return '';
+  }
+}
+
+async function getSessionToken(): Promise<string> {
+  try {
+    const stored = await chrome.storage.session.get(TOKEN_STORAGE_KEY);
+    return stored?.[TOKEN_STORAGE_KEY] || '';
+  } catch {
+    return '';
+  }
+}
+
+async function getActiveTab(): Promise<{ id: number | null; url: string }> {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    return { id: tabs?.[0]?.id ?? null, url: tabs?.[0]?.url || '' };
+  } catch {
+    return { id: null, url: '' };
+  }
+}
+
+function approvedSiteOrigin(tabUrl: string): string {
+  const origin = originOf(tabUrl);
+  if (!APPROVED_ORIGINS.includes(origin)) {
+    throw new Error('UNAVAILABLE:SITE_NOT_APPROVED');
+  }
+  return origin;
+}
+
+async function backend<T>(
+  path: string,
+  opts: { method?: string; body?: unknown; auth?: boolean; managementKey?: string; siteId?: string } = {},
+): Promise<T> {
+  const { method = 'GET', body = null, auth = true, managementKey = '', siteId = '' } = opts;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (auth) {
+    const token = await getSessionToken();
+    if (!token) throw new Error('UNAVAILABLE:NO_SESSION_TOKEN');
+    const tab = await getActiveTab();
+    headers['Authorization'] = `Bearer ${token}`;
+    headers['X-SiteAware-Site-Origin'] = approvedSiteOrigin(tab.url);
+  }
+  if (managementKey) {
+    headers['X-Management-Key'] = managementKey;
+  }
+  let url = `${BACKEND_BASE}${path}`;
+  if (siteId) {
+    url += `${path.includes('?') ? '&' : '?'}site_id=${encodeURIComponent(siteId)}`;
+  }
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: body == null ? null : JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => String(response.status));
+    throw new Error(`UNAVAILABLE:BACKEND_${response.status}:${text.slice(0, 200)}`);
+  }
+  return (await response.json()) as T;
+}
+
+// ---------- public contract types (shaped by real backend) ----------
+
+export type Capabilities = {
+  contract_version: string;
+  mode: string;
+  stage6: boolean;
+  capabilities: { design: boolean; learn: boolean; assist: boolean; highlight: boolean; verify: boolean; actions: boolean };
+};
+
+export type SiteProfile = {
+  site_id: string;
+  origin: string;
+  allowed_host: string;
+  start_route: string;
+  login_route: string;
+  locale: string;
+  direction: string;
+  access_scope: string;
+};
+
+export type LearningSessionDict = {
+  session_id: string;
+  site_id: string;
+  scope_id: string;
+  run_id: string;
+  state: string;
+  pages_observed: number;
+  aliases_resolved: number;
+  frontier_depth: number;
+  current_item: string;
+  nodes_added: number;
+  edges_added: number;
+  observations_ingested: number;
+  rejected_routes: number;
+  interactions_explored: number;
+};
+
+export type ApplicationMap = {
+  site_id: string;
+  scope_id: string;
+  state: string;
+  appearance_configured: boolean;
+  pages_observed: number;
+  routes_known: number;
+  graph_nodes: number;
+  graph_edges: number;
+  auto_knowledge_sources: number;
+  customer_knowledge_sources: number;
+  areas: Array<{ entity_id: string; label_ar: string; label_en: string }>;
+  sessions: Array<{ session_id: string; state: string; pages_observed: number }>;
+};
+
+export type QueryResult = {
+  answer: string;
+  grounded: boolean;
+  target?: { identity: string; safe_label: string } | null;
+  path?: string[];
+  path_status?: string;
+  verification?: { expected_route: string };
+  guide?: { mode: string; target_identity: string; expected_route: string } | null;
+  current_page?: { route_template: string; observed: boolean };
+};
+
+export type VerifyResult = {
+  status: string;
+  reason: string;
+  message_ar: string;
+  recovery: string;
+};
+
+// ---------- deterministic Auto Match (no AI, no network) ----------
+
+function isHexColor(value: unknown): value is string {
+  return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
+function clampInt(value: unknown, min: number, max: number, fallback: number): number {
+  const n = typeof value === 'number' ? Math.round(value) : NaN;
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+/**
+ * buildAppearanceFromProfile — REAL deterministic transformation:
+ * sanitized SiteDesignProfile -> AppearanceConfig v1 flat keys.
+ * Works fully offline. Rejects secret-like/remote/markup values by
+ * only accepting #hex colors, short font names, bounded numbers.
+ */
+export function buildAppearanceFromProfile(profile: Record<string, any>): Record<string, any> {
+  const pick = (list: unknown): string | null => {
+    if (!Array.isArray(list)) return null;
+    for (const entry of list) {
+      if (isHexColor(entry)) return entry;
+    }
+    return null;
+  };
+  const appearance: Record<string, any> = {
+    theme: 'light',
+    primary_color: pick(profile?.dominant_colors) ?? '#6d28d9',
+    radius_px: clampInt(profile?.radius_px, 0, 32, 12),
+    density: 'comfortable',
+    launcher_position: 'bottom-right',
+    launcher_shape: 'round',
+    direction: profile?.direction === 'ltr' ? 'ltr' : 'rtl',
+    font_scale: 1.0,
+    panel_width_px: 380,
+    panel_height_px: 560,
+    locale: typeof profile?.locale === 'string' ? String(profile.locale).slice(0, 8) : 'ar',
+  };
+  const surface = pick(profile?.surface_colors);
+  if (surface) appearance['surface'] = surface;
+  const text = pick(profile?.text_colors);
+  if (text) appearance['text'] = text;
+  const border = pick(profile?.border_colors);
+  if (border) appearance['border'] = border;
+  const fonts = Array.isArray(profile?.font_families)
+    ? profile.font_families.filter((f: unknown) => typeof f === 'string' && /^[A-Za-z0-9 \-]{1,32}$/.test(f)).slice(0, 4)
+    : [];
+  if (fonts.length) appearance['font'] = fonts[0];
+  return appearance;
+}
+
+// ---------- unified adapter ----------
+
+export const UnifiedSiteAwareExtensionAdapter = {
+  BACKEND_BASE,
+  APPROVED_ORIGINS,
+
+  // ---- capabilities / readiness (public loopback) ----
+  async getCapabilities(): Promise<Capabilities> {
+    const res = await fetch(`${BACKEND_BASE}/api/extension/capabilities`);
+    if (!res.ok) throw new Error(`UNAVAILABLE:BACKEND_${res.status}`);
+    return (await res.json()) as Capabilities;
+  },
+
+  async getDevStatus(): Promise<Record<string, any>> {
+    const res = await fetch(`${BACKEND_BASE}/dev/status`);
+    if (!res.ok) throw new Error(`UNAVAILABLE:BACKEND_${res.status}`);
+    return (await res.json()) as Record<string, any>;
+  },
+
+  async getSiteProfile(): Promise<SiteProfile> {
+    const res = await fetch(`${BACKEND_BASE}/api/local/v1/site-profile`);
+    if (!res.ok) throw new Error(`UNAVAILABLE:BACKEND_${res.status}`);
+    const data = (await res.json()) as { profile: SiteProfile };
+    return data.profile;
+  },
+
+  /** APPLICATION readiness: tab + session + origin binding, evaluated locally. */
+  async getReadiness(): Promise<{
+    tabUrl: string;
+    siteOrigin: string;
+    inScope: boolean;
+    hasSessionToken: boolean;
+    state: 'READY' | 'LOGIN_REQUIRED' | 'OUT_OF_SCOPE' | 'NO_SESSION';
+  }> {
+    const tab = await getActiveTab();
+    const siteOrigin = originOf(tab.url);
+    const token = await getSessionToken();
+    const inScope = APPROVED_ORIGINS.includes(siteOrigin);
+    if (!inScope) return { tabUrl: tab.url, siteOrigin, inScope: false, hasSessionToken: Boolean(token), state: 'OUT_OF_SCOPE' };
+    if (!token) return { tabUrl: tab.url, siteOrigin, inScope, hasSessionToken: false, state: 'NO_SESSION' };
+    return { tabUrl: tab.url, siteOrigin, inScope, hasSessionToken: true, state: 'READY' };
+  },
+
+  /** Current page: active tab URL + path (structural only, no content). */
+  async getCurrentPage(): Promise<{ url: string; origin: string; path: string }> {
+    const tab = await getActiveTab();
+    let path = '';
+    try {
+      path = new URL(tab.url).pathname || '/';
+    } catch {
+      path = '';
+    }
+    return { url: tab.url, origin: originOf(tab.url), path };
+  },
+
+  // ---- appearance (DESIGN) ----
+  async getAppearance(siteId = 'local'): Promise<Record<string, any>> {
+    const res = await fetch(`${BACKEND_BASE}/api/local/v1/appearance?site_id=${encodeURIComponent(siteId)}`);
+    if (!res.ok) throw new Error(`UNAVAILABLE:BACKEND_${res.status}`);
+    const data = (await res.json()) as { appearance: Record<string, any> };
+    return data.appearance;
+  },
+
+  async saveAppearance(config: Record<string, any>, siteId = 'local', managementKey = ''): Promise<Record<string, any>> {
+    return backend<{ appearance: Record<string, any> }>(`/api/local/v1/appearance`, {
+      method: 'PUT',
+      body: config,
+      auth: false,
+      managementKey,
+      siteId,
+    }).then((d) => (d as any).appearance ?? d);
+  },
+
+  /** DESIGN observation: sanitized SiteDesignProfile from the active tab. */
+  async getDesignProfile(): Promise<Record<string, any> | null> {
+    const tab = await getActiveTab();
+    if (tab.id == null) throw new Error('UNAVAILABLE:NO_ACTIVE_TAB');
+    try {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content-script.js'] }).catch(() => {});
+    } catch {
+      /* injection best-effort */
+    }
+    return new Promise((resolve, reject) => {
+      chrome.tabs.sendMessage(tab.id, { type: 'SITEAWARE_SCAN_PAGE' }, (resp: any) => {
+        if (chrome.runtime?.lastError) {
+          reject(new Error(`UNAVAILABLE:${chrome.runtime.lastError.message || 'NO_CONTENT_SCRIPT'}`));
+          return;
+        }
+        if (resp?.ok && resp?.profile) resolve(resp.profile as Record<string, any>);
+        else reject(new Error('UNAVAILABLE:SCAN_FAILED'));
+      });
+    });
+  },
+
+  /** AUTO MATCH: deterministic profile -> appearance (offline, real). */
+  autoMatch(profile: Record<string, any>): Record<string, any> {
+    return buildAppearanceFromProfile(profile);
+  },
+
+  // ---- learn ----
+  async startLearning(opts: { start_route?: string; max_unique_pages?: number; max_depth?: number } = {}): Promise<LearningSessionDict> {
+    const data = await backend<{ session: LearningSessionDict }>(`/api/extension/v1/learning-sessions`, {
+      method: 'POST',
+      body: {
+        start_route: opts.start_route ?? '',
+        max_unique_pages: opts.max_unique_pages ?? 25,
+        max_depth: opts.max_depth ?? 3,
+      },
+    });
+    return data.session;
+  },
+
+  async getLearningProgress(sessionId: string): Promise<LearningSessionDict> {
+    const data = await backend<{ session: LearningSessionDict }>(`/api/extension/v1/learning-sessions/${sessionId}`, { method: 'GET' });
+    return data.session;
+  },
+
+  async pauseLearning(sessionId: string): Promise<LearningSessionDict> {
+    const data = await backend<{ session: LearningSessionDict }>(`/api/extension/v1/learning-sessions/${sessionId}/pause`, { method: 'POST', body: {} });
+    return data.session;
+  },
+
+  async resumeLearning(sessionId: string): Promise<LearningSessionDict> {
+    const data = await backend<{ session: LearningSessionDict }>(`/api/extension/v1/learning-sessions/${sessionId}/resume`, { method: 'POST', body: {} });
+    return data.session;
+  },
+
+  async stopLearning(sessionId: string): Promise<LearningSessionDict> {
+    const data = await backend<{ session: LearningSessionDict }>(`/api/extension/v1/learning-sessions/${sessionId}/cancel`, { method: 'POST', body: {} });
+    return data.session;
+  },
+
+  /** Request a same-browser learning pass (service worker owns navigation). */
+  async requestLearnPass(args: { origin: string; routes: string[]; maxPages?: number }): Promise<{ status: string; visited: Array<{ route: string; status: string; observation?: any }> }> {
+    return new Promise((resolve, reject) => {
+      try {
+        chrome.runtime.sendMessage(
+          { type: 'SITEAWARE_LEARN_PASS', origin: args.origin, routes: args.routes.slice(0, 30), maxPages: args.maxPages ?? 25 },
+          (resp: any) => {
+            if (chrome.runtime?.lastError) {
+              reject(new Error(`UNAVAILABLE:${chrome.runtime.lastError.message || 'WORKER_UNREACHABLE'}`));
+              return;
+            }
+            resolve(resp);
+          },
+        );
+      } catch (e) {
+        reject(new Error(`UNAVAILABLE:${e instanceof Error ? e.message : 'WORKER_SEND_FAILED'}`));
+      }
+    });
+  },
+
+  async ingestObservation(sessionId: string, observation: Record<string, any>, navigatedRoute = ''): Promise<Record<string, any>> {
+    return backend<Record<string, any>>(`/api/extension/v1/observations`, {
+      method: 'POST',
+      body: { session_id: sessionId, observation, navigated_route: navigatedRoute || undefined },
+    });
+  },
+
+  // ---- brain / knowledge ----
+  async getBrainMap(): Promise<ApplicationMap> {
+    return backend<ApplicationMap>(`/api/extension/v1/application-map`, { method: 'GET' });
+  },
+
+  // ---- assist / 5C / 5D / 5E ----
+  async observeActiveTab(): Promise<Record<string, any> | null> {
+    const tab = await getActiveTab();
+    if (tab.id == null) throw new Error('UNAVAILABLE:NO_ACTIVE_TAB');
+    try {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content-script.js'] }).catch(() => {});
+    } catch {
+      /* best effort */
+    }
+    return new Promise((resolve, reject) => {
+      chrome.tabs.sendMessage(tab.id, { type: 'SITEAWARE_OBSERVE' }, (resp: any) => {
+        if (chrome.runtime?.lastError) {
+          reject(new Error(`UNAVAILABLE:${chrome.runtime.lastError.message || 'OBSERVE_FAILED'}`));
+          return;
+        }
+        if (resp?.status === 'OBSERVED' && resp?.observation) resolve(resp.observation);
+        else reject(new Error('UNAVAILABLE:OBSERVE_UNRESOLVED'));
+      });
+    });
+  },
+
+  toCurrentPage(observation: Record<string, any>): Record<string, any> {
+    return {
+      url: observation.url,
+      title: observation.title || '',
+      language: observation.language || 'ar',
+      direction: observation.direction || 'rtl',
+      headings: [],
+      links: (observation.links || []).slice(0, 30).map((link: any) => ({ name: link.label || '', href: link.href })),
+      semantic_controls: (observation.controls || []).slice(0, 30).map((control: any) => ({ role: control.role, name: control.label || '' })),
+    };
+  },
+
+  /** 5C resolve + grounded answer (backend authority). */
+  async askAssist(question: string, locale = 'ar'): Promise<QueryResult> {
+    const observation = await this.observeActiveTab().catch(() => null);
+    return backend<QueryResult>(`/api/extension/v1/query`, {
+      method: 'POST',
+      body: { question, locale, current_page: observation ? this.toCurrentPage(observation) : null },
+    });
+  },
+
+  /** 5D highlight: live structural re-resolution in the tab (outline only). */
+  async highlightTarget(structuralId: string): Promise<boolean> {
+    const tab = await getActiveTab();
+    if (tab.id == null) throw new Error('UNAVAILABLE:NO_ACTIVE_TAB');
+    return new Promise((resolve, reject) => {
+      chrome.tabs.sendMessage(tab.id, { type: 'SITEAWARE_HIGHLIGHT', structural_id: structuralId }, (resp: any) => {
+        if (chrome.runtime?.lastError) {
+          reject(new Error(`UNAVAILABLE:${chrome.runtime.lastError.message || 'HIGHLIGHT_FAILED'}`));
+          return;
+        }
+        resolve(Boolean(resp?.highlighted));
+      });
+    });
+  },
+
+  async clearHighlight(): Promise<void> {
+    const tab = await getActiveTab();
+    if (tab.id == null) return;
+    await new Promise((resolve) => {
+      chrome.tabs.sendMessage(tab.id, { type: 'SITEAWARE_CLEAR_HIGHLIGHT' }, () => resolve(null));
+    });
+  },
+
+  /** Resolve a backend target_identity to a live ctl-N/lnk-N id via fresh observation. */
+  async resolveStructuralId(targetIdentity: string): Promise<string> {
+    const observation = await this.observeActiveTab().catch(() => null);
+    if (!observation) return '';
+    const wanted = String(targetIdentity || '').toLowerCase();
+    for (const [index, control] of ((observation.controls || []) as any[]).entries()) {
+      const label = String(control.label || '').toLowerCase();
+      if (label && (label === wanted || wanted.includes(label) || label.includes(wanted))) return `ctl-${index}`;
+    }
+    for (const [index, link] of ((observation.links || []) as any[]).entries()) {
+      const label = String(link.label || '').toLowerCase();
+      if (label && (label === wanted || wanted.includes(label) || label.includes(wanted))) return `lnk-${index}`;
+    }
+    return '';
+  },
+
+  /** 5E verify: evidence-based post-navigation check (backend authority). */
+  async verifyArrival(args: { expected_route: string; observed_route_template: string; observed_url: string; session_id?: string }): Promise<VerifyResult> {
+    return backend<VerifyResult>(`/api/extension/v1/verify`, {
+      method: 'POST',
+      body: {
+        expected_route: args.expected_route,
+        observed_route_template: args.observed_route_template,
+        observed_url: args.observed_url,
+        session_id: args.session_id || undefined,
+      },
+    });
+  },
+};
+
+export type UnifiedAdapter = typeof UnifiedSiteAwareExtensionAdapter;

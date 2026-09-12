@@ -615,7 +615,146 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
     state.observer.observe(document.documentElement, { childList: true, subtree: true });
   }
 
+  // ---- SiteAware runtime observation + 5D highlight (structural only) ----
+  // Ported from the canonical local-integration content script: never reads
+  // input values, cookies, tokens, storage, body text, raw HTML, or records.
+  const SA_HIGHLIGHT_STYLE_ID = 'siteaware-highlight-style';
+  const SA_HIGHLIGHT_ATTR = 'data-siteaware-highlight';
+  const SA_UUID_RE = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g;
+  const SA_MUTATION_FRAGMENTS = ['logout', 'delete', 'remove', 'save', 'submit', 'approve', 'send', 'create', 'prescribe', 'upload', 'payment', 'pay', 'checkout', 'register', 'signup', 'signin', 'login'];
+  const SA_CONTROL_SELECTOR = 'button, [role="button"], [role="tab"], [role="menu"], [role="menubar"], [role="menuitem"], [role="dialog"], [role="alertdialog"], [role="switch"], input[type="button"], input[type="submit"]';
+
+  function saVisible(node) {
+    try {
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  function saTemplateUuid(value) {
+    return String(value || '').replace(SA_UUID_RE, ':id');
+  }
+
+  function saSafeHref(rawHref) {
+    try {
+      const parsed = new URL(rawHref, location.href);
+      if (parsed.origin !== location.origin) return '';
+      const path = parsed.pathname || '/';
+      if (SA_MUTATION_FRAGMENTS.some((frag) => path.toLowerCase().includes(frag))) return '';
+      return saTemplateUuid(parsed.origin + path);
+    } catch {
+      return '';
+    }
+  }
+
+  function saClip(value, limit) {
+    return String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
+  }
+
+  function collectSafeObservation() {
+    const links = [];
+    for (const node of document.querySelectorAll('a[href]')) {
+      if (links.length >= 100) break;
+      if (!saVisible(node)) continue;
+      const href = saSafeHref(node.getAttribute('href') || '');
+      if (!href) continue;
+      links.push({ href, label: saClip(node.getAttribute('aria-label') || node.textContent || '', 80), index: links.length });
+    }
+    const controls = [];
+    for (const node of document.querySelectorAll(SA_CONTROL_SELECTOR)) {
+      if (controls.length >= 100) break;
+      if (!saVisible(node)) continue;
+      const tag = (node.tagName || '').toLowerCase();
+      controls.push({
+        role: node.getAttribute('role') || (tag === 'input' ? 'button' : tag),
+        label: saClip(node.getAttribute('aria-label') || node.getAttribute('title') || node.textContent || '', 80),
+        index: controls.length,
+      });
+    }
+    return {
+      url: saTemplateUuid(location.href),
+      title: saClip(document.title || '', 120),
+      language: saClip(document.documentElement.lang || '', 12),
+      direction: document.dir === 'ltr' ? 'ltr' : 'rtl',
+      route_template: saTemplateUuid(location.pathname || '/'),
+      origin: location.origin,
+      links,
+      controls,
+      captured_at: new Date().toISOString(),
+      access_scope: 'authenticated',
+    };
+  }
+
+  function saEnsureHighlightStyle() {
+    if (document.getElementById(SA_HIGHLIGHT_STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = SA_HIGHLIGHT_STYLE_ID;
+    style.textContent =
+      `[${SA_HIGHLIGHT_ATTR}] { outline: 3px solid #6d28d9 !important; outline-offset: 3px !important; border-radius: 8px !important; }` +
+      `[${SA_HIGHLIGHT_ATTR}]::after { content: 'SiteAware'; position: absolute; z-index: 2147483647; background: #6d28d9; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 6px; }`;
+    document.documentElement.appendChild(style);
+  }
+
+  function saClearHighlight() {
+    saEnsureHighlightStyle();
+    for (const node of document.querySelectorAll(`[${SA_HIGHLIGHT_ATTR}]`)) {
+      node.removeAttribute(SA_HIGHLIGHT_ATTR);
+    }
+  }
+
+  function saHighlightTarget(structuralId) {
+    saClearHighlight();
+    if (!structuralId) return { highlighted: false };
+    const match = /^([a-z]+)-(\d+)$/.exec(String(structuralId));
+    if (!match) return { highlighted: false };
+    const [, kind, rawIndex] = match;
+    const index = Number(rawIndex);
+    let pool = [];
+    if (kind === 'ctl') {
+      pool = [...document.querySelectorAll(SA_CONTROL_SELECTOR)].filter(saVisible).slice(0, 100);
+    } else if (kind === 'lnk') {
+      pool = [...document.querySelectorAll('a[href]')].filter(saVisible);
+    } else {
+      return { highlighted: false };
+    }
+    const node = pool[index];
+    if (!node) return { highlighted: false };
+    try {
+      node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    } catch { /* best effort */ }
+    node.setAttribute(SA_HIGHLIGHT_ATTR, 'true');
+    return { highlighted: true };
+  }
+
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type === 'SITEAWARE_OBSERVE') {
+      try {
+        sendResponse?.({ status: 'OBSERVED', observation: collectSafeObservation() });
+      } catch {
+        sendResponse?.({ status: 'UNRESOLVED' });
+      }
+      return true;
+    }
+    if (message?.type === 'SITEAWARE_HIGHLIGHT') {
+      try {
+        sendResponse?.({ status: 'HIGHLIGHTED', ...saHighlightTarget(message.structural_id) });
+      } catch {
+        sendResponse?.({ status: 'UNRESOLVED' });
+      }
+      return true;
+    }
+    if (message?.type === 'SITEAWARE_CLEAR_HIGHLIGHT') {
+      try {
+        saClearHighlight();
+        sendResponse?.({ status: 'CLEARED' });
+      } catch {
+        sendResponse?.({ status: 'UNRESOLVED' });
+      }
+      return true;
+    }
     if (message?.type === 'SITEAWARE_RENDER_WIDGET') {
       renderWidget(message.config || {}).then(() => sendResponse?.({ ok: true })).catch((error) => sendResponse?.({ ok: false, error: error.message }));
       watchRouteChanges();
