@@ -7,7 +7,7 @@
     "default_title": "SiteAware Preview"
   },
   "permissions": ["activeTab", "scripting", "storage", "tabs", "sidePanel"],
-  "host_permissions": ["https://siteaware-widget-studio.onrender.com/*"],
+  "host_permissions": ["https://siteaware-widget-studio.onrender.com/*", "https://rousheta.net/*", "http://127.0.0.1/*"],
   "background": {
     "service_worker": "service-worker.js",
     "type": "module"
@@ -15,6 +15,13 @@
   "side_panel": {
     "default_path": "sidepanel.html"
   },
+  "content_scripts": [
+    {
+      "matches": ["https://rousheta.net/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "web_accessible_resources": [
     {
       "resources": ["shared/*.js"],

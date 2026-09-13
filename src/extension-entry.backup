@@ -1,0 +1,13 @@
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import App from './App';
+import { ExtensionStudioAdapter } from './studio/adapters/ExtensionStudioAdapter';
+
+const container = document.getElementById('root');
+if (container) {
+  // The adapter implements StudioAdapter from App.tsx; we cast to any to
+  // bypass the type identity mismatch (two independently-defined
+  // DesignPatch types) while the runtime shapes are compatible.
+  createRoot(container).render(<App adapter={ExtensionStudioAdapter as any} />);
+}
+

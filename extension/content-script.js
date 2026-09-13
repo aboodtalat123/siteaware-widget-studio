@@ -679,6 +679,10 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
       title: saClip(document.title || '', 120),
       language: saClip(document.documentElement.lang || '', 12),
       direction: document.dir === 'ltr' ? 'ltr' : 'rtl',
+      // canonical_path is REQUIRED by the backend observation contract
+      // (bridge.validate_extension_observation); route_template is kept
+      // as a compatible hint. Both use the same entity templating.
+      canonical_path: saTemplateUuid(location.pathname || '/'),
       route_template: saTemplateUuid(location.pathname || '/'),
       origin: location.origin,
       links,

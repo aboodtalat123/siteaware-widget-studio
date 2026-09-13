@@ -63,6 +63,20 @@ export type AppearanceConfig = {
   primaryColor: string;
 };
 
+export type LauncherAssetConfig = {
+  kind: 'uploaded';
+  name: string;
+  dataUrl: string;
+  mimeType: string;
+  fit: 'contain' | 'cover';
+  shape: 'circle' | 'rounded' | 'square';
+  background: 'transparent' | 'auto' | 'custom';
+  backgroundColor: string;
+  padding: number;
+  border: boolean;
+  shadow: boolean;
+};
+
 export type StudioConfig = {
   assistantIcon: string;
   launcher: string;
@@ -76,6 +90,7 @@ export type StudioConfig = {
   takeMeThere: string;
   theme: string;
   themeOrigin?: 'manual' | 'auto-brand' | 'auto-contrast' | 'auto-premium';
+  launcherAsset?: LauncherAssetConfig;
   appearance: AppearanceConfig;
 };
 
@@ -753,6 +768,122 @@ export const takeMeThereVariants: VariantItem[] = [
 ];
 
 export const presetDefinitions: PresetDefinition[] = [
+  {
+    id: 'studio-quiet-white',
+    label: 'Quiet White Studio',
+    note: 'White, calm, business-ready assistant with low visual noise',
+    config: {
+      assistantIcon: 'bot-06',
+      launcher: 'circle-icon',
+      chatShell: 'minimal',
+      header: 'header-minimal',
+      assistantMessage: 'flat-text',
+      userMessage: 'outline',
+      inputBar: 'pill-input',
+      sendButton: 'send-circle',
+      sourceCitation: 'source-footer',
+      takeMeThere: 'cta-subtle',
+      theme: 'neutral-light',
+      appearance: {
+        radius: 'md',
+        widgetWidth: 420,
+        widgetHeight: 660,
+        density: 'comfortable',
+        fontScale: 1,
+        shadowStrength: 0.38,
+        launcherSize: 'md',
+        launcherPosition: 'bottom-right',
+        primaryColor: '#111827',
+      },
+    },
+  },
+  {
+    id: 'clinic-calm-pro',
+    label: 'Clinic Calm Pro',
+    note: 'Soft medical style for Arabic healthcare portals',
+    config: {
+      assistantIcon: 'pulse-12',
+      launcher: 'rounded-square',
+      chatShell: 'soft-assistant',
+      header: 'header-status',
+      assistantMessage: 'bordered-card',
+      userMessage: 'pill',
+      inputBar: 'classic-input',
+      sendButton: 'send-circle',
+      sourceCitation: 'source-chips',
+      takeMeThere: 'cta-highlighted',
+      theme: 'healthcare',
+      appearance: {
+        radius: 'lg',
+        widgetWidth: 430,
+        widgetHeight: 680,
+        density: 'comfortable',
+        fontScale: 1.01,
+        shadowStrength: 0.52,
+        launcherSize: 'md',
+        launcherPosition: 'bottom-right',
+        primaryColor: '#128c7e',
+      },
+    },
+  },
+  {
+    id: 'campus-guide-white',
+    label: 'Campus Guide White',
+    note: 'Clear university assistant with tidy sources and RTL spacing',
+    config: {
+      assistantIcon: 'nodes-04',
+      launcher: 'assistant-name',
+      chatShell: 'side-panel',
+      header: 'header-docked',
+      assistantMessage: 'source-first',
+      userMessage: 'bubble-rounded',
+      inputBar: 'card-composer',
+      sendButton: 'send-lift',
+      sourceCitation: 'source-doc-page',
+      takeMeThere: 'cta-primary',
+      theme: 'education',
+      appearance: {
+        radius: 'md',
+        widgetWidth: 440,
+        widgetHeight: 720,
+        density: 'comfortable',
+        fontScale: 1,
+        shadowStrength: 0.48,
+        launcherSize: 'md',
+        launcherPosition: 'bottom-right',
+        primaryColor: '#2563eb',
+      },
+    },
+  },
+  {
+    id: 'glass-lite',
+    label: 'Glass Lite',
+    note: 'Selective translucent assistant without heavy glassmorphism',
+    config: {
+      assistantIcon: 'halo-07',
+      launcher: 'glass-launcher',
+      chatShell: 'liquid-glass',
+      header: 'header-minimal',
+      assistantMessage: 'card',
+      userMessage: 'glass',
+      inputBar: 'glass-composer',
+      sendButton: 'send-circle',
+      sourceCitation: 'source-footer',
+      takeMeThere: 'cta-link',
+      theme: 'neutral-light',
+      appearance: {
+        radius: 'xl',
+        widgetWidth: 430,
+        widgetHeight: 660,
+        density: 'comfortable',
+        fontScale: 1,
+        shadowStrength: 0.3,
+        launcherSize: 'md',
+        launcherPosition: 'bottom-right',
+        primaryColor: '#334155',
+      },
+    },
+  },
   {
     id: 'apple-liquid-glass',
     label: 'Apple Liquid Glass',

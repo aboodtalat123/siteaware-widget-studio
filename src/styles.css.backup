@@ -1,6 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+
 :root {
   color-scheme: light;
-  font-family: 'Manrope', 'Noto Sans Arabic', 'Segoe UI', sans-serif;
+  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
   line-height: 1.5;
   font-weight: 400;
   --background: #f6f8fd;
@@ -24,7 +26,9 @@
   --widget-height: 620px;
   color: var(--text);
   background:
-    linear-gradient(120deg, color-mix(in srgb, var(--background) 94%, white), var(--background) 48%, color-mix(in srgb, var(--surface-secondary) 84%, white));
+    radial-gradient(circle at top left, color-mix(in srgb, var(--primary) 18%, transparent), transparent 34%),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--warning) 14%, transparent), transparent 28%),
+    linear-gradient(180deg, color-mix(in srgb, var(--background) 88%, black) 0%, var(--background) 42%, #05070b 100%);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -46,7 +50,9 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background:
-    linear-gradient(120deg, #f7f9fd 0%, var(--background) 45%, #eef3f8 100%);
+    radial-gradient(circle at top left, color-mix(in srgb, var(--primary) 10%, transparent), transparent 34%),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--warning) 10%, transparent), transparent 28%),
+    linear-gradient(180deg, color-mix(in srgb, var(--background) 94%, white) 0%, var(--background) 42%, #edf2f8 100%);
 }
 
 button,
@@ -75,9 +81,9 @@ button:disabled {
 
 .panel {
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface) 96%, var(--background));
-  box-shadow: 0 16px 42px rgb(16 24 40 / calc(8% + 12% * var(--shadow-strength)));
-  backdrop-filter: blur(12px);
+  background: color-mix(in srgb, var(--surface) 92%, black);
+  box-shadow: 0 24px 60px rgb(0 0 0 / calc(16% + 20% * var(--shadow-strength)));
+  backdrop-filter: blur(18px);
 }
 
 .hero {
@@ -86,13 +92,13 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 20px 24px;
-  border-radius: calc(var(--radius) - 10px);
+  padding: 18px 22px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--primary) 7%, transparent), transparent 38%),
-    linear-gradient(180deg, color-mix(in srgb, var(--surface) 98%, var(--background)), color-mix(in srgb, var(--surface-secondary) 80%, var(--surface)));
-  box-shadow: 0 16px 44px rgb(16 24 40 / calc(7% + 10% * var(--shadow-strength)));
+    linear-gradient(135deg, color-mix(in srgb, var(--primary) 12%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, black), color-mix(in srgb, var(--surface-secondary) 80%, black));
+  box-shadow: 0 24px 60px rgb(0 0 0 / calc(16% + 20% * var(--shadow-strength)));
 }
 
 .hero-copy {
@@ -118,7 +124,7 @@ button:disabled {
   margin: 0;
   font-size: clamp(1.8rem, 3vw, 3rem);
   line-height: 1;
-  letter-spacing: 0;
+  letter-spacing: -0.05em;
 }
 
 .hero p {
@@ -189,8 +195,8 @@ button:disabled {
 }
 
 .primary-button {
-  background: var(--text);
-  color: var(--surface);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 26%, transparent), color-mix(in srgb, var(--success) 16%, transparent));
+  color: var(--text);
 }
 
 .secondary-button,
@@ -235,9 +241,9 @@ button:disabled {
 .preset-card.active,
 .variant-card.active,
 .theme-card.active {
-  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 20%, transparent), color-mix(in srgb, var(--success) 10%, transparent));
   border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
-  box-shadow: 0 10px 24px rgb(16 24 40 / 10%);
+  box-shadow: 0 14px 30px rgb(0 0 0 / 18%);
 }
 
 .copilot-template-button {
@@ -560,167 +566,6 @@ button:disabled {
   border-radius: 18px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface-secondary) 54%, transparent);
-}
-
-.design-action-card {
-  margin-top: 12px;
-  padding: 14px;
-  border-radius: 18px;
-  border: 1px solid color-mix(in srgb, var(--primary) 34%, var(--border));
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--primary) 7%, var(--surface)), color-mix(in srgb, var(--surface-secondary) 72%, var(--surface)));
-}
-
-.change-list {
-  display: grid;
-  gap: 7px;
-  margin-bottom: 12px;
-}
-
-.change-list span {
-  padding: 9px 10px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface) 76%, transparent);
-  color: var(--muted-text);
-  font-size: 0.84rem;
-}
-
-.change-list span::before {
-  content: '↳';
-  margin-inline-end: 8px;
-  color: var(--primary);
-}
-
-.design-history-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 12px;
-  padding: 10px;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--surface-secondary) 56%, transparent);
-}
-
-.design-history-bar span {
-  color: var(--muted-text);
-  font-size: 0.86rem;
-}
-
-.upload-drop {
-  display: grid;
-  gap: 6px;
-  padding: 16px;
-  border: 1px dashed color-mix(in srgb, var(--primary) 34%, var(--border));
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--surface-secondary) 42%, transparent);
-  cursor: pointer;
-}
-
-.upload-drop input {
-  inline-size: 1px;
-  block-size: 1px;
-  opacity: 0;
-  position: absolute;
-  pointer-events: none;
-}
-
-.upload-drop strong {
-  color: var(--text);
-}
-
-.upload-drop span,
-.form-error {
-  color: var(--muted-text);
-  font-size: 0.88rem;
-}
-
-.form-error {
-  color: var(--danger);
-}
-
-.asset-control-card,
-.reference-profile-card {
-  display: grid;
-  grid-template-columns: 92px 1fr;
-  gap: 14px;
-  margin-top: 14px;
-  padding: 14px;
-  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-  border-radius: 22px;
-  background: color-mix(in srgb, var(--surface) 76%, transparent);
-}
-
-.asset-preview-large {
-  display: grid;
-  place-items: center;
-  width: 82px;
-  height: 82px;
-  border-radius: 24px;
-  background: color-mix(in srgb, var(--primary) 8%, var(--surface-secondary));
-  overflow: hidden;
-}
-
-.asset-preview-large .launcher-asset-image {
-  width: 72px;
-  height: 72px;
-}
-
-.asset-control-fields {
-  display: grid;
-  gap: 10px;
-}
-
-.asset-control-fields label {
-  display: grid;
-  gap: 5px;
-  color: var(--muted-text);
-  font-size: 0.84rem;
-}
-
-.asset-control-fields select,
-.asset-control-fields input[type='color'] {
-  width: 100%;
-}
-
-.inline-toggle-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.inline-toggle-row label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.reference-profile-card img {
-  width: 92px;
-  height: 92px;
-  border-radius: 22px;
-  object-fit: cover;
-  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-}
-
-.reference-profile-card p {
-  margin: 6px 0 10px;
-  color: var(--muted-text);
-  line-height: 1.6;
-}
-
-.palette-row {
-  display: flex;
-  gap: 7px;
-  margin-bottom: 10px;
-}
-
-.palette-row span {
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  box-shadow: 0 8px 18px rgb(15 23 42 / 12%);
 }
 
 .copilot-result-card strong {
@@ -1229,19 +1074,6 @@ button:disabled {
 .launcher-preview svg {
   width: 26px;
   height: 26px;
-}
-
-.launcher-preview.has-launcher-asset {
-  overflow: hidden;
-  padding: 0;
-  background: transparent;
-  border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
-}
-
-.launcher-asset-image {
-  display: block;
-  width: 100%;
-  height: 100%;
 }
 
 .launcher-copy {
@@ -4096,225 +3928,3 @@ body {
   }
 }
 
-/* ============ Final Owner UX layer (side-panel first) ============ */
-
-.truth-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.truth-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 5px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-secondary) 58%, transparent);
-  color: var(--muted-text);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.truth-badge.guide {
-  color: var(--primary);
-  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
-}
-
-.truth-badge.stage-off {
-  color: var(--muted-text);
-}
-
-.truth-badge.ready {
-  color: var(--success);
-  border-color: color-mix(in srgb, var(--success) 38%, var(--border));
-}
-
-.truth-badge.not-ready {
-  color: var(--warning);
-  border-color: color-mix(in srgb, var(--warning) 38%, var(--border));
-}
-
-.owner-nav {
-  padding: 12px;
-  border-radius: var(--radius);
-}
-
-.owner-nav-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.owner-nav-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 10px 6px;
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-secondary) 72%, transparent);
-  color: var(--text);
-  min-width: 0;
-}
-
-.owner-nav-item:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
-}
-
-.owner-nav-item.active {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 20%, transparent), color-mix(in srgb, var(--success) 10%, transparent));
-  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
-  box-shadow: 0 14px 30px rgb(0 0 0 / 18%);
-}
-
-.owner-nav-icon {
-  font-size: 1.05rem;
-  line-height: 1;
-}
-
-.owner-nav-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-.owner-connection-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-  margin-top: 10px;
-  color: var(--muted-text);
-  font-size: 0.72rem;
-}
-
-.design-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.design-tab {
-  padding: 8px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-secondary) 72%, transparent);
-  color: var(--muted-text);
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.design-tab.active {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 20%, transparent), color-mix(in srgb, var(--success) 10%, transparent));
-  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
-  color: var(--text);
-  box-shadow: 0 14px 30px rgb(0 0 0 / 18%);
-}
-
-.support-badge {
-  display: inline-block;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
-
-.support-deterministic {
-  background: color-mix(in srgb, var(--success) 16%, transparent);
-  color: var(--success);
-}
-
-.support-ai-assisted {
-  background: color-mix(in srgb, var(--primary) 14%, transparent);
-  color: var(--primary);
-}
-
-.support-unavailable {
-  background: color-mix(in srgb, var(--muted-text) 14%, transparent);
-  color: var(--muted-text);
-}
-
-button.analysis-card {
-  width: 100%;
-  text-align: start;
-  cursor: pointer;
-  font: inherit;
-  color: inherit;
-}
-
-button.analysis-card.active {
-  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
-  box-shadow: 0 14px 30px rgb(0 0 0 / 18%);
-}
-
-/* Owner modes: single column, no preview/right rail. */
-.owner-grid {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.owner-grid .preview-column,
-.owner-grid .right-rail {
-  display: none;
-}
-
-.owner-grid .owner-rail {
-  min-width: 0;
-}
-
-/* Wide panel (420px+): two-column cards where text fits. */
-@media (min-width: 420px) {
-  .owner-nav-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-/* Medium panel (360-419px): compact single flows. */
-@media (max-width: 419px) {
-  .app-shell {
-    padding: 14px;
-  }
-
-  .hero-actions {
-    gap: 8px;
-  }
-
-  .copilot-insight-list {
-    gap: 8px;
-  }
-}
-
-/* Narrow panel (below 360px): everything stacks, nav stays visible. */
-@media (max-width: 359px) {
-  .app-shell {
-    padding: 10px;
-  }
-
-  .owner-nav-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
-  }
-
-  .owner-nav-item {
-    padding: 8px 4px;
-  }
-
-  .owner-nav-label {
-    font-size: 0.66rem;
-  }
-
-  .hero h1 {
-    font-size: clamp(1.4rem, 8vw, 2rem);
-  }
-
-  .settings-grid {
-    gap: 10px;
-  }
-}

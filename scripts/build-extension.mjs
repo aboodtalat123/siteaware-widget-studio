@@ -13,6 +13,26 @@ console.log('Copying static extension files...');
 await rm(targetDir, { recursive: true, force: true });
 await cp(path.join(root, 'extension'), targetDir, { recursive: true });
 
+// Step 1b: Prune legacy/non-canonical artifacts from the BUILT extension
+// only (source backups are never touched). The unpacked product must be
+// exactly one Unified Extension: no legacy sidepanel.js wiring, no
+// manual-token UI, no *.backup/*.bak files.
+for (const legacy of [
+  'sidepanel.js',
+  'sidepanel.html.legacy-backup',
+  'sidepanel.html.backup',
+]) {
+  await rm(path.join(targetDir, legacy), { force: true });
+}
+{
+  const { readdir } = await import('node:fs/promises');
+  for (const entry of await readdir(targetDir)) {
+    if (entry.endsWith('.backup') || entry.endsWith('.bak')) {
+      await rm(path.join(targetDir, entry), { force: true });
+    }
+  }
+}
+
 // Step 2: Run Vite build with extension config to produce sidepanel-bundle.js and CSS
 console.log('Running Vite build for extension...');
 execSync('vite build --config vite.config.extension.ts', { cwd: root, stdio: 'inherit' });

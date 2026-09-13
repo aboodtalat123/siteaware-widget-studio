@@ -21,6 +21,7 @@ import {
   type StudioConfig,
   type VariantItem,
 } from './studioData';
+import { analyzeReferenceImage, readSafeLauncherAsset, type ReferenceImageProfile } from './studio/reference/referenceImageAnalyzer';
 import {
   applyPrimaryOverride,
   analyzeWebsiteStyle,
@@ -29,7 +30,7 @@ import {
   type WebsiteStyleSnapshot,
   type GeneratedThemeRecommendation,
 } from './themeIntelligence';
-import { UnifiedSiteAwareExtensionAdapter } from './studio/adapters/UnifiedSiteAwareExtensionAdapter';
+import { UnifiedSiteAwareExtensionAdapter, resolveLearnSeed } from './studio/adapters/UnifiedSiteAwareExtensionAdapter';
 
 type AppProps = {
   adapter?: typeof UnifiedSiteAwareExtensionAdapter;
@@ -93,6 +94,21 @@ type DesignResponse = {
   summary?: string;
   reasoning?: string[];
   patch?: DesignPatch;
+};
+
+type DesignHistoryEntry = {
+  id: number;
+  label: string;
+  config: StudioConfig;
+  themeMode: ThemeMode;
+  widgetOpen: boolean;
+};
+
+type PendingDesignAction = {
+  summary: string;
+  reasoning: string[];
+  patch: DesignPatch;
+  changes: string[];
 };
 
 const storageKey = 'siteaware-widget-studio-config-v2';
@@ -218,6 +234,99 @@ function buildInitialConversation(locale: UILocale): ConversationMessage[] {
       action: 'Take me there',
     },
   ];
+}
+
+function labelForVariant(collection: Array<{ id: string; label: string }>, id: unknown) {
+  if (typeof id !== 'string') return '';
+  return collection.find((item) => item.id === id)?.label ?? id;
+}
+
+function describeDesignPatch(
+  patch: DesignPatch,
+  currentConfig: StudioConfig,
+  currentThemeMode: ThemeMode,
+  locale: UILocale,
+) {
+  const changes: string[] = [];
+  const add = (label: string, from: string | number | boolean, to: string | number | boolean) => {
+    if (String(from) !== String(to)) {
+      changes.push(`${label}: ${from} -> ${to}`);
+    }
+  };
+
+  const labels = locale === 'ar'
+    ? {
+        theme: 'الثيم',
+        icon: 'الأيقونة',
+        launcher: 'المشغّل',
+        chat: 'نافذة المحادثة',
+        assistant: 'رد الذكاء',
+        user: 'رسالة المستخدم',
+        input: 'حقل السؤال',
+        send: 'زر الإرسال',
+        sources: 'المصادر',
+        cta: 'زر التوجيه',
+        radius: 'الاستدارة',
+        width: 'العرض',
+        height: 'الارتفاع',
+        density: 'الكثافة',
+        shadow: 'الظل',
+        size: 'حجم الأيقونة',
+        position: 'مكان الأيقونة',
+        color: 'اللون الأساسي',
+        mode: 'وضع العرض',
+        open: 'حالة المحادثة',
+      }
+    : {
+        theme: 'Theme',
+        icon: 'Icon',
+        launcher: 'Launcher',
+        chat: 'Chat shell',
+        assistant: 'Assistant message',
+        user: 'User message',
+        input: 'Composer',
+        send: 'Send button',
+        sources: 'Sources',
+        cta: 'CTA',
+        radius: 'Radius',
+        width: 'Width',
+        height: 'Height',
+        density: 'Density',
+        shadow: 'Shadow',
+        size: 'Launcher size',
+        position: 'Launcher position',
+        color: 'Primary color',
+        mode: 'Theme mode',
+        open: 'Chat open',
+      };
+
+  add(labels.theme, labelForVariant(themePalettes, currentConfig.theme), labelForVariant(themePalettes, patch.theme) || currentConfig.theme);
+  add(labels.icon, labelForVariant(assistantIcons, currentConfig.assistantIcon), labelForVariant(assistantIcons, patch.assistantIcon) || currentConfig.assistantIcon);
+  add(labels.launcher, labelForVariant(launcherVariants, currentConfig.launcher), labelForVariant(launcherVariants, patch.launcher) || currentConfig.launcher);
+  add(labels.chat, labelForVariant(chatShellVariants, currentConfig.chatShell), labelForVariant(chatShellVariants, patch.chatShell) || currentConfig.chatShell);
+  add(labels.assistant, labelForVariant(assistantMessages, currentConfig.assistantMessage), labelForVariant(assistantMessages, patch.assistantMessage) || currentConfig.assistantMessage);
+  add(labels.user, labelForVariant(userMessages, currentConfig.userMessage), labelForVariant(userMessages, patch.userMessage) || currentConfig.userMessage);
+  add(labels.input, labelForVariant(inputBars, currentConfig.inputBar), labelForVariant(inputBars, patch.inputBar) || currentConfig.inputBar);
+  add(labels.send, labelForVariant(sendButtons, currentConfig.sendButton), labelForVariant(sendButtons, patch.sendButton) || currentConfig.sendButton);
+  add(labels.sources, labelForVariant(sourceCitationVariants, currentConfig.sourceCitation), labelForVariant(sourceCitationVariants, patch.sourceCitation) || currentConfig.sourceCitation);
+  add(labels.cta, labelForVariant(takeMeThereVariants, currentConfig.takeMeThere), labelForVariant(takeMeThereVariants, patch.takeMeThere) || currentConfig.takeMeThere);
+
+  if (patch.appearance) {
+    const appearance = patch.appearance;
+    if (appearance.radius) add(labels.radius, currentConfig.appearance.radius, appearance.radius);
+    if (typeof appearance.widgetWidth === 'number') add(labels.width, currentConfig.appearance.widgetWidth, appearance.widgetWidth);
+    if (typeof appearance.widgetHeight === 'number') add(labels.height, currentConfig.appearance.widgetHeight, appearance.widgetHeight);
+    if (appearance.density) add(labels.density, currentConfig.appearance.density, appearance.density);
+    if (typeof appearance.shadowStrength === 'number') add(labels.shadow, currentConfig.appearance.shadowStrength, appearance.shadowStrength);
+    if (appearance.launcherSize) add(labels.size, currentConfig.appearance.launcherSize, appearance.launcherSize);
+    if (appearance.launcherPosition) add(labels.position, currentConfig.appearance.launcherPosition, appearance.launcherPosition);
+    if (appearance.primaryColor) add(labels.color, currentConfig.appearance.primaryColor, appearance.primaryColor);
+  }
+
+  if (patch.themeMode) add(labels.mode, currentThemeMode, patch.themeMode);
+  if (typeof patch.widgetOpen === 'boolean') add(labels.open, true, patch.widgetOpen);
+
+  return changes.slice(0, 10);
 }
 
 function buildThemeModeStyle(themeMode: ThemeMode): CSSProperties {
@@ -449,6 +558,8 @@ type OwnerPanelProps = {
   assistInput: string;
   setAssistInput: (v: string) => void;
   assistLog: Array<{ role: 'user' | 'assistant'; text: string }>;
+  learnVisits: Array<{ route: string; status: string }>;
+  assistSending: boolean;
   fmtOwner: (v: unknown) => string;
   onRefresh: () => void;
   onStartLearn: () => void;
@@ -634,9 +745,14 @@ function OwnerPanel(props: OwnerPanelProps) {
               {ar ? 'إيقاف' : 'STOP'}
             </button>
             <button className="secondary-button" type="button" onClick={props.onLearnPass} disabled={props.ownerLoading}>
-              {ar ? 'تمريرة تعلم واحدة' : 'Single learn pass'}
+              {ar ? 'تمريرة تعلم واحدة (تصحيح)' : 'Single learn pass (debug)'}
             </button>
           </div>
+          <p className="copilot-intro">
+            {ar
+              ? 'بدء التعلم يبدأ من الصفحة الحالية المسجلة ويتابع تلقائيا عبر الحدود الآمنة. الاستكشاف التفاعلي العميق (D3 StateExplorer) غير مربوط بعد في نسخة المتصفح — التنقل بين المسارات والمراقبة البنيوية فقط.'
+              : 'START LEARN seeds from the current authenticated page and traverses automatically via the safe backend frontier. Deep interactive state exploration (D3 StateExplorer) is NOT YET WIRED in this browser build — route traversal + safe observation only.'}
+          </p>
           <div className="copilot-insight-list">
             <OwnerRow label={ar ? 'الجلسة' : 'Session'} value={props.fmtOwner((props.learnSession as any)?.session_id)} />
             <OwnerRow label={ar ? 'الحالة' : 'State'} value={props.fmtOwner((props.learnSession as any)?.state)} />
@@ -646,6 +762,25 @@ function OwnerPanel(props: OwnerPanelProps) {
             <OwnerRow label={ar ? 'العقد / الروابط' : 'Nodes / edges'} value={`${props.fmtOwner((props.learnSession as any)?.nodes_added)} / ${props.fmtOwner((props.learnSession as any)?.edges_added)}`} />
             <OwnerRow label={ar ? 'تفاعلات آمنة' : 'Safe interactions'} value={props.fmtOwner((props.learnSession as any)?.interactions_explored)} />
             <OwnerRow label={ar ? 'مرفوض' : 'Rejected'} value={props.fmtOwner((props.learnSession as any)?.rejected_routes)} />
+          </div>
+          <div className="panel-heading">
+            <h2>{ar ? 'سجل التمريرات' : 'Pass log'}</h2>
+            <span>{props.learnVisits.length}</span>
+          </div>
+          <div className="copilot-insight-list">
+            {props.learnVisits.length ? (
+              props.learnVisits.map((visit, index) => (
+                <div key={`${visit.route}-${index}`} className="analysis-card">
+                  <strong>{visit.route}</strong>
+                  <span>{visit.status}</span>
+                </div>
+              ))
+            ) : (
+              <div className="analysis-card">
+                <strong>{ar ? 'لا تمريرات بعد' : 'No passes yet'}</strong>
+                <span>NO DATA YET</span>
+              </div>
+            )}
           </div>
         </section>
       ) : null}
@@ -773,9 +908,9 @@ function OwnerPanel(props: OwnerPanelProps) {
             )}
           </div>
           <div className="composer widget-input">
-            <input value={props.assistInput} onChange={(e) => props.setAssistInput(e.target.value)} placeholder={ar ? 'اكتب سؤالك...' : 'Ask...'} />
-            <button className="send-button" type="button" onClick={props.onAssistSend}>
-              {ar ? 'إرسال' : 'Send'}
+            <input value={props.assistInput} onChange={(e) => props.setAssistInput(e.target.value)} placeholder={ar ? 'اكتب سؤالك...' : 'Ask...'} disabled={props.assistSending} />
+            <button className="send-button" type="button" onClick={props.onAssistSend} disabled={props.assistSending || !props.assistInput.trim()}>
+              {props.assistSending ? (ar ? '...' : '...') : ar ? 'إرسال' : 'Send'}
             </button>
           </div>
         </section>
@@ -846,10 +981,16 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
   const [designStatus, setDesignStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [designSummary, setDesignSummary] = useState('');
   const [designReasoning, setDesignReasoning] = useState<string[]>([]);
+  const [pendingDesignAction, setPendingDesignAction] = useState<PendingDesignAction | null>(null);
+  const [designHistory, setDesignHistory] = useState<DesignHistoryEntry[]>([]);
   const [styleInput, setStyleInput] = useState(defaultStyleInput);
   const [styleAnalysis, setStyleAnalysis] = useState('');
   const [styleStatus, setStyleStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [styleReasoning, setStyleReasoning] = useState<string[]>([]);
+  const [launcherAssetError, setLauncherAssetError] = useState('');
+  const [referenceProfile, setReferenceProfile] = useState<ReferenceImageProfile | null>(null);
+  const [referenceStatus, setReferenceStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [referenceError, setReferenceError] = useState('');
 
   // ---- REAL OWNER PRODUCT state (Unified adapter runtime, no mocks) ----
   const [ownerLoading, setOwnerLoading] = useState(false);
@@ -877,6 +1018,8 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
   const [assistLog, setAssistLog] = useState<Array<{ role: 'user' | 'assistant'; text: string }>>([]);
   const [designProfile, setDesignProfile] = useState<Record<string, any> | null>(null);
   const [mgmtKey, setMgmtKey] = useState('');
+  const [learnVisits, setLearnVisits] = useState<Array<{ route: string; status: string }>>([]);
+  const [assistSending, setAssistSending] = useState(false);
 
   function ownerFail(error: unknown) {
     const message = error instanceof Error ? error.message : 'UNAVAILABLE:UNKNOWN';
@@ -893,6 +1036,8 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
     setOwnerLoading(true);
     setOwnerError('');
     try {
+      // Ensure LOCAL-DEV runtime session exists before checking readiness
+      await ownerAdapter.ensureLocalDevSession().catch(() => {});
       const [caps, profile, readiness, page, map, appearance] = await Promise.all([
         ownerAdapter.getCapabilities().catch((e) => { throw e; }),
         ownerAdapter.getSiteProfile().catch(() => null),
@@ -917,13 +1062,51 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
   async function handleStartLearn() {
     setOwnerLoading(true);
     setOwnerError('');
+    setLearnVisits([]);
     try {
-      const session = await ownerAdapter.startLearning({
-        start_route: (ownerProfile as any)?.start_route ?? '/ar/clinic/dashboard',
-        max_unique_pages: appBudget,
-        max_depth: 3,
+      // Learn safety net: ensure a local dev session exists before starting learning
+      const ok = await ownerAdapter.ensureLocalDevSession();
+      if (!ok) throw new Error('UNAVAILABLE:NO_SESSION_TOKEN');
+      // START PAGE RULE (single source of truth: resolveLearnSeed):
+      // seed from the CURRENT authenticated live page; fall back to the
+      // profile route only when there is genuinely no live approved page.
+      const page = await ownerAdapter.getCurrentPage().catch(() => null);
+      const fallbackRoute = (ownerProfile as any)?.start_route || '';
+      const rule = resolveLearnSeed({
+        activeUrl: (page as any)?.url || '',
+        approvedOrigins: ['https://rousheta.net'],
+        fallbackRoute,
       });
-      setLearnSession(session as any);
+      if (!rule.seed) throw new Error('UNAVAILABLE:NO_SEED_ROUTE');
+      const seed = rule.seed;
+      const origin = rule.origin || (ownerProfile as any)?.origin || 'https://rousheta.net';
+      // Single press: automatic bounded traversal driven by backend frontier.
+      // Progress streams via onProgress; pause/stop act through backend state.
+      const result = await ownerAdapter.runAutoLearn({
+        startRoute: seed,
+        origin,
+        maxUniquePages: appBudget,
+        maxDepth: 3,
+        maxPasses: 40,
+        passTimeoutMs: 60000,
+        onProgress: (ev: any) => {
+          setLearnSession(ev.session as any);
+          if (Array.isArray(ev.visited) && ev.visited.length) {
+            setLearnVisits((previous: Array<{ route: string; status: string }>) => [
+              ...ev.visited.map((v: any) => ({ route: v.route, status: v.status })),
+              ...previous,
+            ].slice(0, 30));
+          }
+        },
+      });
+      setLearnSession(result.session as any);
+      if (result.visited.length) {
+        setLearnVisits((previous: Array<{ route: string; status: string }>) => [
+          ...result.visited.map((v) => ({ route: v.route, status: v.status })),
+          ...previous,
+        ].slice(0, 30));
+      }
+      await refreshOwnerContext().catch(() => null);
     } catch (error) {
       ownerFail(error);
     } finally {
@@ -1090,9 +1273,10 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
   }
 
   async function handleAssistSend() {
-    if (!assistInput.trim()) return;
+    if (!assistInput.trim() || assistSending) return;
     const question = assistInput.trim();
     setAssistInput('');
+    setAssistSending(true);
     setAssistLog((previous) => [...previous, { role: 'user', text: question }]);
     try {
       const result = await ownerAdapter.askAssist(question, locale);
@@ -1104,6 +1288,8 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
       }
     } catch {
       setAssistLog((previous) => [...previous, { role: 'assistant', text: 'UNAVAILABLE / NOT LEARNED' }]);
+    } finally {
+      setAssistSending(false);
     }
   }
 
@@ -1187,6 +1373,27 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
   const resolvedAutoTheme = activeAutoTheme ? applyPrimaryOverride(activeAutoTheme, config.appearance.primaryColor) : null;
   const activeTheme = resolvedAutoTheme ?? themePalettes.find((theme) => theme.id === config.theme) ?? themePalettes[0]!;
   const currentIconPreview = assistantIcons.find((item) => item.id === config.assistantIcon)?.preview ?? assistantIcons[0]?.preview ?? null;
+  const launcherAsset = config.launcherAsset;
+  const currentLauncherPreview = launcherAsset ? (
+    <img
+      src={launcherAsset.dataUrl}
+      alt={launcherAsset.name}
+      className="launcher-asset-image"
+      style={{
+        objectFit: launcherAsset.fit,
+        padding: `${launcherAsset.padding}px`,
+        borderRadius: launcherAsset.shape === 'circle' ? '999px' : launcherAsset.shape === 'rounded' ? '18px' : '8px',
+        background:
+          launcherAsset.background === 'custom'
+            ? launcherAsset.backgroundColor
+            : launcherAsset.background === 'auto'
+              ? 'color-mix(in srgb, var(--primary) 12%, white)'
+              : 'transparent',
+        border: launcherAsset.border ? '1px solid color-mix(in srgb, var(--primary) 34%, var(--border))' : '0',
+        boxShadow: launcherAsset.shadow ? '0 14px 30px rgb(15 23 42 / 18%)' : 'none',
+      }}
+    />
+  ) : currentIconPreview;
   const currentChatShell = chatShellVariants.find((item) => item.id === config.chatShell);
   const currentAssistantMessage = assistantMessages.find((item) => item.id === config.assistantMessage);
   const currentUserMessage = userMessages.find((item) => item.id === config.userMessage);
@@ -1198,6 +1405,7 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
   const currentSourceLabel =
     sourceCitationVariants.find((item) => item.id === config.sourceCitation)?.label ?? (locale === 'ar' ? 'المصادر' : 'Sources');
   const currentCtaLabel = takeMeThereVariants.find((item) => item.id === config.takeMeThere)?.label ?? (locale === 'ar' ? 'خذني لهناك' : 'Take me there');
+  const latestHistory = designHistory[0];
   const extraCategory: StudioCategory = ['assistantIcon', 'chatShell', 'theme'].includes(selectedCategory)
     ? 'launcher'
     : selectedCategory;
@@ -1240,11 +1448,43 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
     theme: themePalettes.length,
   };
 
+  function pushDesignHistory(label: string) {
+    setDesignHistory((previous) => [
+      {
+        id: Date.now(),
+        label,
+        config: structuredClone(config),
+        themeMode,
+        widgetOpen,
+      },
+      ...previous.slice(0, 11),
+    ]);
+  }
+
+  function undoDesignChange() {
+    const [last, ...rest] = designHistory;
+    if (!last) {
+      return;
+    }
+    setConfig(last.config);
+    setThemeMode(last.themeMode);
+    setWidgetOpen(last.widgetOpen);
+    setActiveAutoTheme(null);
+    setPendingDesignAction(null);
+    setDesignSummary(locale === 'ar' ? `تم الرجوع عن: ${last.label}` : `Undid: ${last.label}`);
+    setDesignReasoning([]);
+    setDesignHistory(rest);
+  }
+
   function updateConfig<K extends keyof StudioConfig>(key: K, value: StudioConfig[K]) {
+    pushDesignHistory(locale === 'ar' ? 'تعديل يدوي' : 'Manual edit');
+    setPendingDesignAction(null);
     setConfig((previous) => ({ ...previous, [key]: value }));
   }
 
   function updateAppearance<K extends keyof StudioConfig['appearance']>(key: K, value: StudioConfig['appearance'][K]) {
+    pushDesignHistory(locale === 'ar' ? 'تعديل مظهر يدوي' : 'Manual appearance edit');
+    setPendingDesignAction(null);
     setConfig((previous) => ({
       ...previous,
       appearance: {
@@ -1254,11 +1494,139 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
     }));
   }
 
+  async function handleLauncherAssetUpload(file: File | undefined) {
+    if (!file) {
+      return;
+    }
+
+    try {
+      const asset = await readSafeLauncherAsset(file);
+      pushDesignHistory(locale === 'ar' ? 'رفع شعار اللانشر' : 'Launcher logo upload');
+      setLauncherAssetError('');
+      setPendingDesignAction(null);
+      setConfig((previous) => ({
+        ...previous,
+        launcher: 'circle-icon',
+        launcherAsset: {
+          ...asset,
+          kind: 'uploaded',
+          fit: 'contain',
+          shape: 'circle',
+          background: 'transparent',
+          backgroundColor: previous.appearance.primaryColor,
+          padding: 6,
+          border: true,
+          shadow: true,
+        },
+        appearance: {
+          ...previous.appearance,
+          launcherSize: previous.appearance.launcherSize === 'sm' ? 'md' : previous.appearance.launcherSize,
+        },
+      }));
+      setWidgetOpen(true);
+    } catch (error) {
+      setLauncherAssetError(error instanceof Error ? error.message : 'Could not load this launcher image.');
+    }
+  }
+
+  function updateLauncherAsset(patch: Partial<NonNullable<StudioConfig['launcherAsset']>>) {
+    if (!config.launcherAsset) {
+      return;
+    }
+    pushDesignHistory(locale === 'ar' ? 'تعديل صورة اللانشر' : 'Launcher image edit');
+    setConfig((previous) => {
+      if (!previous.launcherAsset) {
+        return previous;
+      }
+      return {
+        ...previous,
+        launcherAsset: {
+          ...previous.launcherAsset,
+          ...patch,
+        },
+      };
+    });
+  }
+
+  function removeLauncherAsset() {
+    if (!config.launcherAsset) {
+      return;
+    }
+    pushDesignHistory(locale === 'ar' ? 'حذف شعار اللانشر' : 'Remove launcher logo');
+    setLauncherAssetError('');
+    setConfig((previous) => {
+      const { launcherAsset: _launcherAsset, ...rest } = previous;
+      return rest;
+    });
+  }
+
+  async function handleReferenceImageUpload(file: File | undefined) {
+    if (!file) {
+      return;
+    }
+
+    setReferenceStatus('loading');
+    setReferenceError('');
+    try {
+      const profile = await analyzeReferenceImage(file);
+      setReferenceProfile(profile);
+      setReferenceStatus('idle');
+      setDesignSummary(
+        locale === 'ar'
+          ? `تم تحليل الصورة المرجعية: ${profile.summary}`
+          : `Reference image analyzed: ${profile.summary}`,
+      );
+    } catch (error) {
+      setReferenceStatus('error');
+      setReferenceError(error instanceof Error ? error.message : 'Could not analyze this reference image.');
+    }
+  }
+
+  function applyReferenceRecommendation() {
+    if (!referenceProfile) {
+      return;
+    }
+
+    const patch: DesignPatch = {
+      theme: referenceProfile.mode === 'dark' ? 'premium-black' : 'neutral-light',
+      chatShell: referenceProfile.mode === 'dark' ? 'premium' : 'minimal',
+      assistantMessage: 'source-first',
+      userMessage: 'outline',
+      sendButton: 'send-circle',
+      themeMode: referenceProfile.mode,
+      widgetOpen: true,
+      appearance: {
+        primaryColor: referenceProfile.primaryColor,
+        radius: referenceProfile.radius,
+        density: referenceProfile.density,
+        shadowStrength: referenceProfile.shadowStrength,
+      },
+    };
+    const normalizedPatch = normalizeDesignPatch(patch);
+    setPendingDesignAction({
+      summary:
+        locale === 'ar'
+          ? 'اقتراح مستوحى من الصورة المرجعية، وليس نسخة مطابقة.'
+          : 'A recommendation inspired by the reference image, not a pixel-perfect clone.',
+      reasoning: [
+        referenceProfile.summary,
+        locale === 'ar'
+          ? `تم اختيار اللون ${referenceProfile.primaryColor} من الصورة.`
+          : `Selected ${referenceProfile.primaryColor} from the reference palette.`,
+      ],
+      patch: normalizedPatch,
+      changes: describeDesignPatch(normalizedPatch, config, themeMode, locale),
+    });
+    setMode('design');
+  }
+
   function applyPreset(presetId: string) {
     const preset = presetDefinitions.find((entry) => entry.id === presetId);
     if (!preset) {
       return;
     }
+    pushDesignHistory(locale === 'ar' ? `قالب ${preset.label}` : `Preset ${preset.label}`);
+    setPendingDesignAction(null);
     setConfig(preset.config);
     setThemeMode(['dark-ai', 'premium'].includes(presetId) ? 'dark' : 'light');
     setActiveAutoTheme(null);
@@ -1437,9 +1805,13 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
     return nextPatch;
   }
 
-  function applyDesignPatch(patch: DesignPatch) {
+  function applyDesignPatch(patch: DesignPatch, label = locale === 'ar' ? 'تعديل الذكاء' : 'AI design edit') {
     const normalized = normalizeDesignPatch(patch);
     const { appearance, themeMode: nextThemeMode, widgetOpen: nextWidgetOpen, focusCategory, ...rest } = normalized;
+
+    if (Object.keys(normalized).length) {
+      pushDesignHistory(label);
+    }
 
     if (Object.keys(rest).length || appearance) {
       setConfig((previous) => ({
@@ -1464,6 +1836,31 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
     if (focusCategory) {
       setSelectedCategory(focusCategory);
     }
+  }
+
+  function previewPendingDesignAction() {
+    if (!pendingDesignAction) {
+      return;
+    }
+    applyDesignPatch(pendingDesignAction.patch, locale === 'ar' ? 'معاينة اقتراح الذكاء' : 'AI design preview');
+    setDesignSummary(
+      locale === 'ar'
+        ? `${pendingDesignAction.summary} تم تطبيق المعاينة مؤقتًا، ويمكنك الرجوع بزر Undo.`
+        : `${pendingDesignAction.summary} Preview applied; you can undo it.`,
+    );
+  }
+
+  function applyPendingDesignAction() {
+    if (!pendingDesignAction) {
+      return;
+    }
+    applyDesignPatch(pendingDesignAction.patch, locale === 'ar' ? 'تطبيق اقتراح الذكاء' : 'Applied AI recommendation');
+    setDesignSummary(
+      locale === 'ar'
+        ? `${pendingDesignAction.summary} تم تثبيت الاقتراح على التصميم.`
+        : `${pendingDesignAction.summary} Recommendation applied to the design.`,
+    );
+    setPendingDesignAction(null);
   }
 
   function resetStudio() {
@@ -1613,6 +2010,8 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
   }
 
   function applyGeneratedTheme(recommendation: GeneratedThemeRecommendation) {
+    pushDesignHistory(locale === 'ar' ? 'مطابقة ستايل الموقع' : 'Website style match');
+    setPendingDesignAction(null);
     setActiveAutoTheme(recommendation);
     setConfig((previous) => ({
       ...previous,
@@ -1653,6 +2052,8 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
     setStyleReasoning(analysis.contrastNotes.slice(0, 3));
     setSelectedCategory('launcher');
     setActiveAutoTheme(recommendation);
+    pushDesignHistory(locale === 'ar' ? 'تحليل ستايل الموقع' : 'Site style analysis');
+    setPendingDesignAction(null);
     setConfig((previous) => ({
       ...previous,
       theme: recommendation.themeId,
@@ -1696,10 +2097,23 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
         throw new Error(data.message || `Request failed with ${response.status}`);
       }
 
-      applyDesignPatch(data.patch ?? {});
+      const normalizedPatch = normalizeDesignPatch(data.patch ?? {});
+      const changes = describeDesignPatch(normalizedPatch, config, themeMode, locale);
+      setPendingDesignAction({
+        summary: data.summary || localSummary,
+        reasoning: Array.isArray(data.reasoning) ? data.reasoning.slice(0, 4) : analysis.contrastNotes.slice(0, 3),
+        patch: normalizedPatch,
+        changes,
+      });
       setActiveAutoTheme(recommendation);
-      setStyleAnalysis(data.summary ? `${localSummary} ${data.summary}` : localSummary);
+      setStyleAnalysis(
+        data.summary
+          ? `${localSummary} ${data.summary} ${locale === 'ar' ? 'راجِع الاقتراح في مصمم الذكاء قبل تثبيته.' : 'Review the recommendation in AI Designer before applying it.'}`
+          : localSummary,
+      );
       setStyleReasoning(Array.isArray(data.reasoning) ? data.reasoning.slice(0, 4) : analysis.contrastNotes.slice(0, 3));
+      setDesignSummary(data.summary || localSummary);
+      setDesignReasoning(Array.isArray(data.reasoning) ? data.reasoning.slice(0, 4) : []);
       setStyleStatus('idle');
     } catch (error) {
       setStyleStatus('error');
@@ -1723,6 +2137,7 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
     setDesignStatus('loading');
     setDesignSummary('');
     setDesignReasoning([]);
+    setPendingDesignAction(null);
 
     try {
       const response = await fetch('/api/design', {
@@ -1745,12 +2160,22 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
         throw new Error(data.message || `Request failed with ${response.status}`);
       }
 
-      applyDesignPatch(data.patch ?? {});
+      const normalizedPatch = normalizeDesignPatch(data.patch ?? {});
+      const changes = describeDesignPatch(normalizedPatch, config, themeMode, locale);
+      setPendingDesignAction({
+        summary: data.summary ??
+          (locale === 'ar'
+            ? 'جهزت اقتراح تصميم منظم.'
+            : 'Prepared a structured design recommendation.'),
+        reasoning: Array.isArray(data.reasoning) ? data.reasoning.slice(0, 4) : [],
+        patch: normalizedPatch,
+        changes,
+      });
       setDesignSummary(
         data.summary ??
           (locale === 'ar'
-            ? 'تم تطبيق تعديلات الذكاء على التصميم الحالي.'
-            : 'The AI designer applied changes to the current widget.'),
+            ? 'جهز الذكاء اقتراحًا للتصميم الحالي.'
+            : 'The AI designer prepared a recommendation for the current widget.'),
       );
       setDesignReasoning(Array.isArray(data.reasoning) ? data.reasoning.slice(0, 4) : []);
       setDesignStatus('idle');
@@ -1952,6 +2377,8 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
               assistInput={assistInput}
               setAssistInput={setAssistInput}
               assistLog={assistLog}
+              learnVisits={learnVisits}
+              assistSending={assistSending}
               fmtOwner={fmtOwner}
               onRefresh={refreshOwnerContext}
               onStartLearn={handleStartLearn}
@@ -1976,8 +2403,8 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
                 </div>
                 <p className="copilot-intro">
                   {locale === 'ar'
-                    ? 'اكتب كيف تريد شكل الأيقونة والمحادثة والثيم، وسأحوّل الطلب إلى إعدادات حقيقية تطبق مباشرة على اليسار واليمين والوسط.'
-                    : 'Describe the launcher, chat shell, and overall style, and the copilot will convert that request into real widget settings.'}
+                    ? 'اكتب طلبك بلغة عادية. الذكاء يقترح إعدادات منظمة أولًا، ثم تختار معاينة أو تطبيق.'
+                    : 'Describe the design in plain language. The copilot prepares a structured recommendation before you preview or apply it.'}
                 </p>
                 <textarea
                   className="copilot-textarea"
@@ -1990,11 +2417,11 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
                   <button className="primary-button" onClick={runDesignCopilot} type="button">
                     {designStatus === 'loading'
                       ? locale === 'ar'
-                        ? 'جاري التطبيق...'
-                        : 'Applying...'
+                        ? 'جاري تجهيز الاقتراح...'
+                        : 'Preparing...'
                       : locale === 'ar'
-                        ? 'طبّق بالذكاء'
-                        : 'Apply with AI'}
+                        ? 'اقترح بالذكاء'
+                        : 'Generate Recommendation'}
                   </button>
                   <button
                     className="secondary-button"
@@ -2023,6 +2450,115 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
                 </div>
               </section>
 
+              <section className="panel-section asset-studio-section">
+                <div className="panel-heading">
+                  <h2>{locale === 'ar' ? 'شعار اللانشر' : 'Launcher Logo'}</h2>
+                  <span>{locale === 'ar' ? 'يظهر فورًا على يمين الموقع' : 'Instantly appears on the live launcher'}</span>
+                </div>
+                <label className="upload-drop">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg"
+                    onChange={(event) => {
+                      void handleLauncherAssetUpload(event.target.files?.[0]);
+                      event.currentTarget.value = '';
+                    }}
+                  />
+                  <strong>{locale === 'ar' ? 'ارفع شعار أو صورة' : 'Upload logo or image'}</strong>
+                  <span>{locale === 'ar' ? 'PNG / JPG / WebP / SVG آمن، أقل من 1MB' : 'PNG / JPG / WebP / safe SVG, under 1 MB'}</span>
+                </label>
+                {launcherAssetError ? <p className="form-error">{launcherAssetError}</p> : null}
+                {launcherAsset ? (
+                  <div className="asset-control-card">
+                    <div className="asset-preview-large">{currentLauncherPreview}</div>
+                    <div className="asset-control-fields">
+                      <strong>{launcherAsset.name}</strong>
+                      <label>
+                        {locale === 'ar' ? 'احتواء الصورة' : 'Image fit'}
+                        <select value={launcherAsset.fit} onChange={(event) => updateLauncherAsset({ fit: event.target.value as NonNullable<StudioConfig['launcherAsset']>['fit'] })}>
+                          <option value="contain">contain</option>
+                          <option value="cover">cover</option>
+                        </select>
+                      </label>
+                      <label>
+                        {locale === 'ar' ? 'الشكل' : 'Shape'}
+                        <select value={launcherAsset.shape} onChange={(event) => updateLauncherAsset({ shape: event.target.value as NonNullable<StudioConfig['launcherAsset']>['shape'] })}>
+                          <option value="circle">{locale === 'ar' ? 'دائري' : 'Circle'}</option>
+                          <option value="rounded">{locale === 'ar' ? 'مستدير' : 'Rounded'}</option>
+                          <option value="square">{locale === 'ar' ? 'مربع' : 'Square'}</option>
+                        </select>
+                      </label>
+                      <label>
+                        {locale === 'ar' ? 'الخلفية' : 'Background'}
+                        <select value={launcherAsset.background} onChange={(event) => updateLauncherAsset({ background: event.target.value as NonNullable<StudioConfig['launcherAsset']>['background'] })}>
+                          <option value="transparent">{locale === 'ar' ? 'شفافة' : 'Transparent'}</option>
+                          <option value="auto">{locale === 'ar' ? 'تلقائية' : 'Automatic'}</option>
+                          <option value="custom">{locale === 'ar' ? 'لون خاص' : 'Custom color'}</option>
+                        </select>
+                      </label>
+                      <label>
+                        {locale === 'ar' ? 'لون الخلفية' : 'Background color'}
+                        <input type="color" value={launcherAsset.backgroundColor} onChange={(event) => updateLauncherAsset({ backgroundColor: event.target.value })} />
+                      </label>
+                      <label>
+                        {locale === 'ar' ? 'الحشوة' : 'Padding'}
+                        <input type="range" min="0" max="14" value={launcherAsset.padding} onChange={(event) => updateLauncherAsset({ padding: Number(event.target.value) })} />
+                      </label>
+                      <div className="inline-toggle-row">
+                        <label><input type="checkbox" checked={launcherAsset.border} onChange={(event) => updateLauncherAsset({ border: event.target.checked })} /> {locale === 'ar' ? 'حد' : 'Border'}</label>
+                        <label><input type="checkbox" checked={launcherAsset.shadow} onChange={(event) => updateLauncherAsset({ shadow: event.target.checked })} /> {locale === 'ar' ? 'ظل' : 'Shadow'}</label>
+                      </div>
+                      <button className="secondary-button" type="button" onClick={removeLauncherAsset}>
+                        {locale === 'ar' ? 'إزالة الصورة' : 'Remove image'}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+
+              <section className="panel-section reference-studio-section">
+                <div className="panel-heading">
+                  <h2>{locale === 'ar' ? 'صورة مرجعية' : 'Reference Image'}</h2>
+                  <span>{locale === 'ar' ? 'إلهام تصميم آمن' : 'Safe style inspiration'}</span>
+                </div>
+                <label className="upload-drop">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg"
+                    onChange={(event) => {
+                      void handleReferenceImageUpload(event.target.files?.[0]);
+                      event.currentTarget.value = '';
+                    }}
+                  />
+                  <strong>{locale === 'ar' ? 'ارفع صورة واجهة أو لقطة شاشة' : 'Upload UI screenshot or reference'}</strong>
+                  <span>{locale === 'ar' ? 'نستخرج إشارات عامة، وليس نسخ مطابق' : 'Extracts general signals, not a pixel-perfect copy'}</span>
+                </label>
+                {referenceStatus === 'loading' ? <p className="style-intake-note">{locale === 'ar' ? 'جاري تحليل الصورة...' : 'Analyzing image...'}</p> : null}
+                {referenceError ? <p className="form-error">{referenceError}</p> : null}
+                {referenceProfile ? (
+                  <div className="reference-profile-card">
+                    <img src={referenceProfile.dataUrl} alt={referenceProfile.name} />
+                    <div>
+                      <strong>{locale === 'ar' ? 'Detected reference style' : 'Detected reference style'}</strong>
+                      <p>{referenceProfile.summary}</p>
+                      <div className="palette-row">
+                        {referenceProfile.palette.map((color) => (
+                          <span key={color} title={color} style={{ background: color }} />
+                        ))}
+                      </div>
+                      <div className="change-list">
+                        <span>{referenceProfile.mode}</span>
+                        <span>{referenceProfile.primaryColor}</span>
+                        <span>{referenceProfile.radius}</span>
+                      </div>
+                      <button className="primary-button" type="button" onClick={applyReferenceRecommendation}>
+                        {locale === 'ar' ? 'جهّز اقتراح مستوحى منها' : 'Prepare inspired recommendation'}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+
               <section className="panel-section">
                 <div className="panel-heading">
                   <h2>{locale === 'ar' ? 'آخر نتيجة' : 'Last Result'}</h2>
@@ -2032,22 +2568,62 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
                   <strong>
                     {designStatus === 'loading'
                       ? locale === 'ar'
-                        ? 'Gemini يعيد تركيب التصميم الآن'
-                        : 'Gemini is recomposing the widget now'
+                        ? 'Gemini يجهز اقتراحًا منظمًا'
+                        : 'Gemini is preparing a structured recommendation'
                       : locale === 'ar'
-                        ? 'ملخص التنفيذ'
-                        : 'Execution summary'}
+                        ? 'اقتراح التصميم'
+                        : 'Design recommendation'}
                   </strong>
                   <p>
                     {designSummary ||
                       (locale === 'ar'
-                        ? 'سيظهر هنا سبب التغييرات التي طبقها الذكاء على الأيقونة والمحادثة والثيم.'
-                        : 'The copilot will explain the design changes it applied to the launcher, chat shell, and theme.')}
+                        ? 'سيظهر هنا ما يقترحه الذكاء قبل تطبيقه على الأيقونة والمحادثة والثيم.'
+                        : 'The copilot will explain the proposed launcher, chat shell, and theme changes before applying them.')}
                   </p>
                 </div>
+                {pendingDesignAction ? (
+                  <div className="design-action-card">
+                    <div className="panel-heading">
+                      <h2>{locale === 'ar' ? 'التغييرات المقترحة' : 'Proposed changes'}</h2>
+                      <span>{locale === 'ar' ? 'قابل للرجوع' : 'Reversible'}</span>
+                    </div>
+                    <div className="change-list">
+                      {pendingDesignAction.changes.length ? (
+                        pendingDesignAction.changes.map((change) => <span key={change}>{change}</span>)
+                      ) : (
+                        <span>{locale === 'ar' ? 'الاقتراح لا يحتوي تغييرات صالحة جديدة.' : 'No new valid changes were found in this recommendation.'}</span>
+                      )}
+                    </div>
+                    <div className="auto-actions">
+                      <button className="secondary-button" onClick={previewPendingDesignAction} type="button" disabled={!pendingDesignAction.changes.length}>
+                        {locale === 'ar' ? 'معاينة' : 'Preview'}
+                      </button>
+                      <button className="primary-button" onClick={applyPendingDesignAction} type="button" disabled={!pendingDesignAction.changes.length}>
+                        {locale === 'ar' ? 'تطبيق' : 'Apply'}
+                      </button>
+                      <button className="secondary-button" onClick={() => setPendingDesignAction(null)} type="button">
+                        {locale === 'ar' ? 'تعديل الطلب' : 'Keep editing'}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                <div className="design-history-bar">
+                  <button className="secondary-button" onClick={undoDesignChange} type="button" disabled={!designHistory.length}>
+                    {locale === 'ar' ? 'تراجع' : 'Undo'}
+                  </button>
+                  <span>
+                    {latestHistory
+                      ? locale === 'ar'
+                        ? `آخر تغيير: ${latestHistory.label}`
+                        : `Last change: ${latestHistory.label}`
+                      : locale === 'ar'
+                        ? 'لا يوجد تاريخ تغييرات بعد'
+                        : 'No design history yet'}
+                  </span>
+                </div>
                 <div className="copilot-insight-list">
-                  {designReasoning.length ? (
-                    designReasoning.map((reason) => (
+                  {(pendingDesignAction?.reasoning.length ? pendingDesignAction.reasoning : designReasoning).length ? (
+                    (pendingDesignAction?.reasoning.length ? pendingDesignAction.reasoning : designReasoning).map((reason) => (
                       <div key={reason} className="analysis-card">
                         <strong>{locale === 'ar' ? 'سبب' : 'Reason'}</strong>
                         <span>{reason}</span>
@@ -2516,7 +3092,7 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
               aria-pressed={widgetOpen}
               type="button"
             >
-              <div className="launcher-preview">{currentIconPreview}</div>
+              <div className={classNames('launcher-preview', launcherAsset && 'has-launcher-asset')}>{currentLauncherPreview}</div>
               <div className="launcher-copy">
                 <strong>{locale === 'ar' ? 'اسأل الذكاء' : 'Ask AI'}</strong>
                 <span>{widgetOpen ? (locale === 'ar' ? 'المساعد مفتوح' : 'Assistant open') : locale === 'ar' ? 'اضغط للفتح' : 'Click to open'}</span>

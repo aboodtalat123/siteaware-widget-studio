@@ -61,44 +61,53 @@ async function backend<T>(
   opts: { method?: string; body?: unknown; auth?: boolean; managementKey?: string; siteId?: string } = {},
 ): Promise<T> {
   const { method = 'GET', body = null, auth = true, managementKey = '', siteId = '' } = opts;
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
+  const tab = await getActiveTab();
+  let token = '';
   if (auth) {
-    const token = await getSessionToken();
+    token = await getSessionToken();
     if (!token) throw new Error('UNAVAILABLE:NO_SESSION_TOKEN');
-
-    const tab = await getActiveTab();
-    headers['Authorization'] = `Bearer ${token}`;
-    headers['X-SiteAware-Site-Origin'] = approvedSiteOrigin(tab.url);
   }
-
-  if (managementKey) {
-    headers['X-Management-Key'] = managementKey;
-  }
-
   let url = `${BACKEND_BASE}${path}`;
   if (siteId) {
-    const sep = url.includes('?') ? '&' : '?';
-    url += `${sep}site_id=${encodeURIComponent(siteId)}`;
+    url += `${path.includes('?') ? '&' : '?'}site_id=${encodeURIComponent(siteId)}`;
   }
-
   const response = await fetch(url, {
     method,
-    headers,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: auth && token ? `Bearer ${token}` : '',
+      'X-SiteAware-Site-Origin': approvedSiteOrigin(tab.url),
+    },
     body: body == null ? null : JSON.stringify(body),
   });
-
-  if (response.status === 401 && auth) {
+  // 401 / expired token: clear stale token and retry once with fresh session
+  if (response.status === 401) {
     await chrome.storage.session.remove(TOKEN_STORAGE_KEY);
-    const text = await response.text().catch(() => '');
-    throw new Error(`UNAVAILABLE:SESSION_401:${text.slice(0, 200)}`);
+    // Retry once: ensureLocalDevSession will be called by the caller
+    // to obtain a fresh token before retrying this same request.
+    const retryResponse = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: '',
+        'X-SiteAware-Site-Origin': approvedSiteOrigin(tab.url),
+      },
+      body: body == null ? null : JSON.stringify(body),
+    });
+    if (retryResponse.status === 401) {
+      const txt = await retryResponse.text().catch(() => '');
+      throw new Error(`UNAVAILABLE:BACKEND_401_AFTER_RETRY:${txt.slice(0, 200)}`);
+    }
+    if (!retryResponse.ok) {
+      const txt = await retryResponse.text().catch(() => String(retryResponse.status));
+      throw new Error(`UNAVAILABLE:BACKEND_${retryResponse.status}:${txt.slice(0, 200)}`);
+    }
+    return (await retryResponse.json()) as T;
   }
-
   if (!response.ok) {
     const text = await response.text().catch(() => String(response.status));
     throw new Error(`UNAVAILABLE:BACKEND_${response.status}:${text.slice(0, 200)}`);
   }
-
   return (await response.json()) as T;
 }
 
@@ -224,36 +233,6 @@ export function buildAppearanceFromProfile(profile: Record<string, any>): Record
   return appearance;
 }
 
-/**
- * resolveLearnSeed — start-page rule for START LEARN (pure, testable):
- * use the ACTIVE authenticated page pathname when it belongs to an
- * approved origin; otherwise fall back to the profile start route only
- * when there is genuinely no live approved page. Never silently prefer
- * a hardcoded route over a live approved page.
- */
-export function resolveLearnSeed(args: {
-  activeUrl: string;
-  approvedOrigins: string[];
-  fallbackRoute?: string;
-}): { origin: string; seed: string } {
-  let origin = '';
-  let path = '';
-  try {
-    const parsed = new URL(args.activeUrl);
-    if (/^https?:$/.test(parsed.protocol)) {
-      origin = parsed.origin;
-      path = parsed.pathname || '';
-    }
-  } catch {
-    origin = '';
-    path = '';
-  }
-  if (origin && args.approvedOrigins.includes(origin) && path) {
-    return { origin, seed: path };
-  }
-  return { origin: '', seed: args.fallbackRoute || '' };
-}
-
 // ---------- unified adapter ----------
 
 export const UnifiedSiteAwareExtensionAdapter = {
@@ -306,39 +285,37 @@ export const UnifiedSiteAwareExtensionAdapter = {
   async ensureLocalDevSession(): Promise<boolean> {
     const stored = await getSessionToken();
     if (stored) return true;
-
     const tab = await getActiveTab();
     if (!tab.url) return false;
-
-    const origin = approvedSiteOrigin(tab.url);
-
-    const res = await fetch(`${BACKEND_BASE}/api/local/v1/dev-session`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-SiteAware-Site-Origin': origin,
-      },
-    });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => String(res.status));
-      throw new Error(
-        `UNAVAILABLE:LOCAL_DEV_SESSION_${res.status}:${text.slice(0, 200)}`
-      );
+    try {
+      const origin = approvedSiteOrigin(tab.url);
+      const res = await fetch(`${BACKEND_BASE}/api/local/v1/dev-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Site-Aware-Site-Origin': origin,
+        },
+        body: JSON.stringify({ site_id: 'local' }),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        if (res.status === 401 || res.status === 403) {
+          // clear stale token and retry once
+          await chrome.storage.session.remove(TOKEN_STORAGE_KEY);
+          return false;
+        }
+        throw new Error(`UNAVAILABLE:BACKEND_${res.status}:${txt.slice(0, 200)}`);
+      }
+      const data = (await res.json());
+      const token = data.access_token || '';
+      if (!token) throw new Error('UNAVAILABLE:NO_TOKEN_RETURNED');
+      // Store token ONLY in chrome.storage.session, never persist elsewhere
+      await chrome.storage.session.set({ [TOKEN_STORAGE_KEY]: token });
+      return true;
+    } catch (e) {
+      // fail closed: do not store / log token
+      return false;
     }
-
-    const data = await res.json() as Record<string, any>;
-    const token = String(data?.access_token || '');
-
-    if (!token) {
-      throw new Error('UNAVAILABLE:NO_TOKEN_RETURNED');
-    }
-
-    await chrome.storage.session.set({
-      [TOKEN_STORAGE_KEY]: token,
-    });
-
-    return true;
   },
 
   /** Current page: active tab URL + path (structural only, no content). */
@@ -395,161 +372,6 @@ export const UnifiedSiteAwareExtensionAdapter = {
   /** AUTO MATCH: deterministic profile -> appearance (offline, real). */
   autoMatch(profile: Record<string, any>): Record<string, any> {
     return buildAppearanceFromProfile(profile);
-  },
-
-  /**
-   * runAutoLearn — automatic bounded traversal driven by the backend frontier.
-   * Adapted from the proven old extension/sidepanel.js startLearning() loop:
-   * seed from the CURRENT live page -> observe -> ingest -> next_route ->
-   * SITEAWARE_LEARN_PASS -> observe -> ingest(navigated_route) -> repeat.
-   * Bounds: attempted-set dedup, maxPasses guard, backend session state
-   * (pause/stop/complete ends the loop), optional shouldContinue hook.
-   * No clicks, no forms, no mutations: route navigation only via the
-   * service-worker pass, observations only via the sanitized observer.
-   * D3 StateExplorer (deep interaction) is NOT called here — NOT YET WIRED
-   * in this browser build; this covers automatic ROUTE traversal + safe
-   * observation only.
-   */
-  async runAutoLearn(opts: {
-    sessionId?: string;
-    startRoute?: string;
-    origin?: string;
-    maxUniquePages?: number;
-    maxDepth?: number;
-    maxPasses?: number;
-    passTimeoutMs?: number;
-    onProgress?: (ev: { session: LearningSessionDict; visited: Array<{ route: string; status: string }>; next: string }) => void;
-    shouldContinue?: () => boolean;
-  } = {}): Promise<{ session: LearningSessionDict; visited: Array<{ route: string; status: string }> }> {
-    const maxPasses = Math.min(Math.max(opts.maxPasses ?? 40, 1), 40);
-    const passTimeoutMs = Math.min(Math.max(opts.passTimeoutMs ?? 60000, 5000), 60000);
-    const visited: Array<{ route: string; status: string }> = [];
-
-    // Resolve origin + seed from the CURRENT live page unless explicitly given.
-    let origin = opts.origin || '';
-    let seed = opts.startRoute || '';
-    if (!origin || !seed) {
-      const page = await this.getCurrentPage();
-      const pageOrigin = page.origin || '';
-      if (!APPROVED_ORIGINS.includes(pageOrigin)) {
-        throw new Error('UNAVAILABLE:SITE_NOT_APPROVED');
-      }
-      origin = origin || pageOrigin;
-      if (!seed) {
-        seed = page.path || '';
-      }
-    }
-    if (!origin || !APPROVED_ORIGINS.includes(origin)) {
-      throw new Error('UNAVAILABLE:SITE_NOT_APPROVED');
-    }
-    if (!seed) {
-      throw new Error('UNAVAILABLE:NO_SEED_ROUTE');
-    }
-
-    // Start (or attach to) a learning session seeded from the live page.
-    let session: LearningSessionDict;
-    if (opts.sessionId) {
-      session = await this.getLearningProgress(opts.sessionId);
-    } else {
-      session = await this.startLearning({
-        start_route: seed,
-        max_unique_pages: opts.maxUniquePages ?? 25,
-        max_depth: opts.maxDepth ?? 3,
-      });
-    }
-    const sessionId = session.session_id;
-    if (!sessionId) throw new Error('UNAVAILABLE:NO_LEARNING_SESSION');
-
-    const withTimeout = <T>(p: Promise<T>, ms: number, label: string): Promise<T> =>
-      new Promise<T>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error(`UNAVAILABLE:${label}_TIMEOUT`)), ms);
-        p.then(
-          (v) => { clearTimeout(timer); resolve(v); },
-          (e) => { clearTimeout(timer); reject(e); },
-        );
-      });
-
-    // Observe the CURRENT live page first (authenticated seed).
-    // Granular observe errors propagate untouched so the UI shows the
-    // real reason (e.g. ACTIVE_TAB_OUT_OF_SCOPE) instead of a flat code.
-    const firstObservation = await this.observeActiveTab();
-    let ingested = await this.ingestObservation(sessionId, firstObservation);
-    if ((ingested as any)?.session) session = (ingested as any).session as LearningSessionDict;
-    let next: string = String((ingested as any)?.next_route || (session as any)?.current_item || '');
-    opts.onProgress?.({ session, visited: [], next });
-    if (!next) {
-      session = await this.getLearningProgress(sessionId).catch(() => session);
-      return { session, visited };
-    }
-
-    // Bounded traversal driven by the backend frontier.
-    const attempted = new Set<string>();
-    let guard = 0;
-    let advancedEver = false;
-    let firstIngestError: unknown = null;
-    while (next && guard < maxPasses) {
-      if (opts.shouldContinue && !opts.shouldContinue()) break;
-      const live = await this.getLearningProgress(sessionId).catch(() => null);
-      if (live) {
-        session = live;
-        if (live.state !== 'active') break;
-      }
-      if (attempted.has(next)) break;
-      attempted.add(next);
-      guard += 1;
-
-      let pass: { status: string; visited: Array<{ route: string; status: string; observation?: any }> };
-      try {
-        pass = await withTimeout(
-          this.requestLearnPass({ origin, routes: [next], maxPages: 1 }),
-          passTimeoutMs,
-          'LEARN_PASS',
-        );
-      } catch (e) {
-        throw e instanceof Error ? e : new Error('UNAVAILABLE:LEARN_PASS_FAILED');
-      }
-
-      let advanced = false;
-      for (const item of pass.visited || []) {
-        if (opts.shouldContinue && !opts.shouldContinue()) break;
-        visited.push({ route: item.route, status: item.status });
-        if (item.observation) {
-          const more = await this.ingestObservation(sessionId, item.observation, next).catch((e) => {
-            if (!firstIngestError) firstIngestError = e;
-            return null;
-          });
-          if (more && (more as any).session) {
-            session = (more as any).session as LearningSessionDict;
-            const candidate = String((more as any).next_route || (session as any).current_item || '');
-            // Alias/redirect honesty: the backend may return the same route
-            // template it just observed; the attempted-set prevents loops.
-            next = candidate;
-            advanced = true;
-            advancedEver = true;
-          }
-        }
-      }
-      opts.onProgress?.({ session, visited: visited.slice(-10), next });
-      if (!advanced) break;
-
-      const check = await this.getLearningProgress(sessionId).catch(() => null);
-      if (check) {
-        session = check;
-        if (check.state !== 'active') break;
-        if (!next) break;
-      }
-    }
-
-    session = await this.getLearningProgress(sessionId).catch(() => session);
-    // Honest failure: if traversal never advanced past the seed because
-    // ingestion kept failing, surface the first error instead of a
-    // silent partial result.
-    if (!advancedEver && visited.length > 0 && firstIngestError) {
-      throw firstIngestError instanceof Error
-        ? firstIngestError
-        : new Error('UNAVAILABLE:INGEST_FAILED');
-    }
-    return { session, visited };
   },
 
   // ---- learn ----
@@ -612,82 +434,28 @@ export const UnifiedSiteAwareExtensionAdapter = {
     });
   },
 
-  /**
-   * D3 authorization seam (Core classifier is the authority).
-   * Submits structural descriptors; returns Core-approved SAFE_STRUCTURAL
-   * intents plus explicit abstentions. No actuation happens here and no
-   * browser-side click executor exists yet — the browser must never treat
-   * an approval as permission to touch anything but the approved
-   * structural primitive, and only after a live descriptor re-match.
-   */
-  async authorizeInteractions(descriptors: Array<Record<string, any>>): Promise<{
-    approvals: Array<{ element_uid: string; kind: string; reason: string; restore_intent: string | null }>;
-    abstentions: Array<{ element_uid: string; classification: string; reason: string }>;
-  }> {
-    return backend<{
-      approvals: Array<{ element_uid: string; kind: string; reason: string; restore_intent: string | null }>;
-      abstentions: Array<{ element_uid: string; classification: string; reason: string }>;
-    }>(`/api/extension/v1/interactions/authorize`, {
-      method: 'POST',
-      body: { descriptors },
-    });
-  },
-
-  /** Record one Core-authorized, safely executed UI interaction. */
-  async noteInteraction(sessionId: string): Promise<LearningSessionDict> {
-    const data = await backend<{ session: LearningSessionDict }>(
-      `/api/extension/v1/learning-sessions/${sessionId}/interactions`,
-      { method: 'POST', body: {} },
-    );
-    return data.session;
-  },
-
   // ---- brain / knowledge ----
   async getBrainMap(): Promise<ApplicationMap> {
     return backend<ApplicationMap>(`/api/extension/v1/application-map`, { method: 'GET' });
   },
 
   // ---- assist / 5C / 5D / 5E ----
-  /**
-   * observeActiveTab — sanitized failure taxonomy (never credentials):
-   * - NO_ACTIVE_TAB: no tab handle at all
-   * - ACTIVE_TAB_OUT_OF_SCOPE: tab URL is known and not the approved pilot
-   * - CONTENT_SCRIPT_NOT_AVAILABLE: observer not injected on the tab
-   *   (manifest content_scripts + programmatic fallback both missed)
-   * - MESSAGE_PORT_CLOSED: tab navigated away mid-handshake
-   * - NO_OBSERVATION_RETURNED: listener answered without an observation
-   */
-  async observeActiveTab(): Promise<Record<string, any>> {
+  async observeActiveTab(): Promise<Record<string, any> | null> {
     const tab = await getActiveTab();
     if (tab.id == null) throw new Error('UNAVAILABLE:NO_ACTIVE_TAB');
-    if (tab.url && !APPROVED_ORIGINS.includes(originOf(tab.url))) {
-      throw new Error('UNAVAILABLE:OBSERVE_FAILED:ACTIVE_TAB_OUT_OF_SCOPE');
-    }
-    // Programmatic injection is a fallback only: the manifest declares
-    // content_scripts for the approved origin, so the observer is
-    // normally already present before the panel ever asks.
     try {
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content-script.js'] }).catch(() => {});
     } catch {
-      /* best effort; classified below if messaging still fails */
+      /* best effort */
     }
     return new Promise((resolve, reject) => {
       chrome.tabs.sendMessage(tab.id, { type: 'SITEAWARE_OBSERVE' }, (resp: any) => {
         if (chrome.runtime?.lastError) {
-          const raw = String(chrome.runtime.lastError.message || '');
-          if (/could not establish connection|receiving end does not exist/i.test(raw)) {
-            reject(new Error('UNAVAILABLE:OBSERVE_FAILED:CONTENT_SCRIPT_NOT_AVAILABLE'));
-            return;
-          }
-          if (/message port closed|port closed|message channel closed/i.test(raw)) {
-            reject(new Error('UNAVAILABLE:OBSERVE_FAILED:MESSAGE_PORT_CLOSED'));
-            return;
-          }
-          reject(new Error(`UNAVAILABLE:OBSERVE_FAILED:${raw.slice(0, 120) || 'MESSAGE_FAILED'}`));
+          reject(new Error(`UNAVAILABLE:${chrome.runtime.lastError.message || 'OBSERVE_FAILED'}`));
           return;
         }
         if (resp?.status === 'OBSERVED' && resp?.observation) resolve(resp.observation);
-        else reject(new Error('UNAVAILABLE:OBSERVE_FAILED:NO_OBSERVATION_RETURNED'));
+        else reject(new Error('UNAVAILABLE:OBSERVE_UNRESOLVED'));
       });
     });
   },
