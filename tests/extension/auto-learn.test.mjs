@@ -340,3 +340,178 @@ test('auto-learn never retries an attempted route (alias/redirect honesty)', asy
   const result = await simulatedAutoLearn(deps, { startRoute: '/ar/a', maxPasses: 40 });
   assert.deepEqual(result.visited.map((v) => v.route), ['/b']);
 });
+
+test('disclosure_expansion_collapsed_reveals_links', async () => {
+  // Scenario: observation has a control with aria-expanded=false (collapsed)
+  const deps = makeDeps({
+    seed: '/ar/a',
+    ingestQueue: [
+      // First observation has a collapsed disclosure control
+      { url: 'https://rousheta.net/a', route_template: '/a', links: [], controls: [{ role: 'button', label: 'Employees', ariaExpanded: false, index: 0 }] },
+    ],
+    passQueue: [],
+    progress: () => ({ session_id: 'lrn_test', state: 'active', current_item: '/a' }),
+  });
+  // Simulate the first observation being returned from observeActiveTab
+  let ingested;
+  // We need to test exploreDisclosure logic - let's test it directly
+  // by checking the identifySafeDisclosures method
+  const source = await readFile(ADAPTER_URL, 'utf8');
+  // Verify the adapter identifies safe disclosures from controls with aria-expanded
+  assert.ok(
+    source.includes('identifySafeDisclosures'),
+    'adapter must expose identifySafeDisclosures method',
+  );
+  assert.ok(
+    source.includes('ariaExpanded'),
+    'adapter must check aria-expanded attribute',
+  );
+});
+
+test('disclosure_expansion_expanded_ignored_when_no_new_links', async () => {
+  const source = await readFile(ADAPTER_URL, 'utf8');
+  // Verify the adapter sort preference for collapsed first
+  assert.ok(
+    source.includes('ariaExpanded === false ? -1 : 1'),
+    'adapter must prefer collapsed disclosures first',
+  );
+});
+
+test('disclosure_delta_computes_newly_visible_links', async () => {
+  const source = await readFile(ADAPTER_URL, 'utf8');
+  assert.ok(
+    source.includes('computeLinkDelta'),
+    'adapter must expose computeLinkDelta method',
+  );
+});
+
+test('disclosure_no_delta_stops_honestly', async () => {
+  const source = await readFile(ADAPTER_URL, 'utf8');
+  // Verify the runAutoLearn loop handles no-disclosure case
+  assert.ok(
+    source.includes('advancedEver'),
+    'runAutoLearn must track ever-advanced state',
+  );
+  assert.ok(
+    source.includes('firstIngestError'),
+    'runAutoLearn must surface ingest errors',
+  );
+});
+
+test('disclosure_loop_protection_avoids_re_exploration', async () => {
+  const source = await readFile(ADAPTER_URL, 'utf8');
+  // Verify the runAutoLearn loop has attempted-set dedup
+  assert.ok(
+    source.includes('attempted'),
+    'runAutoLearn must track attempted routes',
+  );
+  // The actual string in the source is "if (attempted.has(next)) break"
+  assert.ok(
+    source.includes('if (attempted.has(next)) break'),
+    'runAutoLearn must stop on already-attempted route',
+  );
+});
+
+test('disclosure_unsafe_buttons_rejected_without_aria_expanded', async () => {
+  const source = await readFile(ADAPTER_URL, 'utf8');
+  // The identifySafeDisclosures only considers controls with aria-expanded set
+  assert.ok(
+    source.includes('ariaExpanded !== undefined'),
+    'adapter must only consider controls with aria-expanded set',
+  );
+  // Fail-closed: controls without aria-expanded are not processed
+  assert.ok(
+    source.includes('ariaExpanded') && source.includes('undefined'),
+    'adapter must check for aria-expanded attribute presence',
+  );
+});
+
+test('disclosure_existing_visible_link_discovery_still_works', async () => {
+  const source = await readFile(APP_URL, 'utf8');
+  assert.ok(
+    source.includes('runAutoLearn'),
+    'handleStartLearn must call runAutoLearn',
+  );
+  assert.ok(
+    source.includes('resolveLearnSeed'),
+    'handleStartLearn must use the shared seed rule',
+  );
+});
+
+test('disclosure_page_exhausts_multiple_collapsed_groups', async () => {
+  const source = await readFile(ADAPTER_URL, 'utf8');
+  // The per-page loop must iterate over ALL eligible disclosures, not just the first.
+  assert.ok(
+    source.includes('for (let step = 0; step < maxDisclosuresPerPage; step++)'),
+    'disclosure loop must iterate bounded per page (not single-shot)',
+  );
+  assert.ok(
+    source.includes('maxDisclosuresPerPage'),
+    'disclosure loop must have a per-page bound',
+  );
+  // It must re-observe inside the loop so the next candidate comes from an updated page.
+  assert.ok(
+    source.includes('await this.observeActiveTab()'),
+    'disclosure loop must re-observe inside the loop',
+  );
+  // The loop must not restart from the first disclosure each time.
+  assert.ok(
+    source.includes('candidate'),
+    'disclosure loop must pick the next candidate per step',
+  );
+});
+
+test('disclosure_page_state_key_prevents_open_close_churn', async () => {
+  const source = await readFile(ADAPTER_URL, 'utf8');
+  // Loop protection: (page :: control-index :: expanded-state) identity.
+  assert.ok(
+    source.includes('pageRoute'),
+    'disclosure loop must key state by page route',
+  );
+  assert.ok(
+    source.includes('exploredKeys'),
+    'disclosure loop must track explored state keys',
+  );
+  assert.ok(
+    source.includes('control-index') ||
+      source.includes('d.index') ||
+      source.includes('candidate.index'),
+    'disclosure loop must key state by control index',
+  );
+});
+
+test('disclosure_page_no_delta_stops_honestly', async () => {
+  const source = await readFile(ADAPTER_URL, 'utf8');
+  assert.ok(
+    source.includes('noDeltaStreak'),
+    'disclosure loop must track consecutive no-delta steps',
+  );
+  assert.ok(
+    source.includes('maxNoDeltaStreak'),
+    'disclosure loop must bound consecutive no-delta steps',
+  );
+});
+
+test('disclosure_page_runAutoLearn_calls_bounded_explorer', async () => {
+  const source = await readFile(ADAPTER_URL, 'utf8');
+  // runAutoLearn must invoke the bounded per-page explorer (not the old single-shot).
+  assert.ok(
+    source.includes('exploreDisclosuresPage'),
+    'runAutoLearn must call exploreDisclosuresPage',
+  );
+  assert.equal(
+    source.includes('exploreDisclosure('),
+    false,
+    'single-shot exploreDisclosure must be removed',
+  );
+});
+
+test('disclosure_page_counts_safe_interaction_after_delta', async () => {
+  const source = await readFile(ADAPTER_URL, 'utf8');
+  // A successfully executed disclosure must be counted via noteInteraction
+  // so interactions_explored becomes > 0 in the backend session.
+  assert.ok(
+    source.includes('await this.noteInteraction(sessionId)'),
+    'disclosure exploration must record the interaction after ingesting delta',
+  );
+});

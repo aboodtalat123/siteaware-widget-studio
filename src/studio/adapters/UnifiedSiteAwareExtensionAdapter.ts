@@ -183,6 +183,17 @@ function clampInt(value: unknown, min: number, max: number, fallback: number): n
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, n));
 }
+const SA_UUID_RE = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g;
+
+/** Template a raw value by replacing entity UUIDs with a stable :id placeholder. */
+function saTemplateUuid(value: string): string {
+  return String(value || '').replace(SA_UUID_RE, ':id');
+}
+
+/** Clip/sanitize a label for structural observation records. */
+function saClip(value: unknown, limit: number): string {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
+}
 
 /**
  * buildAppearanceFromProfile — REAL deterministic transformation:
@@ -476,6 +487,20 @@ export const UnifiedSiteAwareExtensionAdapter = {
     let ingested = await this.ingestObservation(sessionId, firstObservation);
     if ((ingested as any)?.session) session = (ingested as any).session as LearningSessionDict;
     let next: string = String((ingested as any)?.next_route || (session as any)?.current_item || '');
+
+    // //////////////////////////////////////////////////////////
+    // EXPLORE SAFE NAVIGATION DISCLOSURES (bounded, autonomous)
+    // After ingesting the seed observation, autonomously expand the
+    // safe expandable sidebar groups on this page. Each expansion
+    // reveals hidden child navigation items, which are ingested into
+    // the existing backend frontier so traversal can visit them.
+    // The loop is bounded per page and tracks (page, disclosure,
+    // expanded-state) to prevent open/close churn.
+    const disclosureResult = await this.exploreDisclosuresPage(firstObservation, sessionId, origin);
+    void disclosureResult;
+    // Newly revealed routes are ingested into the backend below;
+    // the next requestLearnPass will pick them up from the frontier.
+    // //////////////////////////////////////////////////////////
     opts.onProgress?.({ session, visited: [], next });
     if (!next) {
       session = await this.getLearningProgress(sessionId).catch(() => session);
@@ -610,6 +635,170 @@ export const UnifiedSiteAwareExtensionAdapter = {
       method: 'POST',
       body: { session_id: sessionId, observation, navigated_route: navigatedRoute || undefined },
     });
+  },
+  /**
+   * identifySafeDisclosures — from an observation, find controls that have
+   * the aria-expanded attribute, which is the structural signal of an
+   * expandable/collapsible navigation group. Fail-closed: only controls where
+   * aria-expanded is explicitly set are eligible; buttons without it are
+   * ignored (we never click arbitrary controls).
+   */
+  identifySafeDisclosures(observation: Record<string, any>): Array<{ index: number; label: string; ariaExpanded: boolean }> {
+    const result: Array<{ index: number; label: string; ariaExpanded: boolean }> = [];
+    const controls = observation.controls || [];
+    for (const control of controls) {
+      if (control.ariaExpanded !== undefined) {
+        result.push({
+          index: control.index,
+          label: control.label,
+          ariaExpanded: control.ariaExpanded,
+        });
+      }
+    }
+    // Prefer collapsed (aria-expanded=false) first; expanded second.
+    result.sort((a, b) => (a.ariaExpanded === false ? -1 : 1));
+    return result;
+  },
+
+  /**
+   * computeLinkDelta — compare links from two observations and return
+   * newly visible links that were not present before.
+   */
+  computeLinkDelta(previous: Record<string, any>, current: Record<string, any>): Array<{ label: string; href: string }> {
+    const prevHrefs = new Set((previous.links || []).map((l: any) => l.href));
+    const currentLinks = current.links || [];
+    return currentLinks.filter((l: any) => !prevHrefs.has(l.href));
+  },
+
+  /**
+   * clickDisclosure — programmatically click ONE disclosure control by its
+   * structural index via the content script. Fail-closed: the content script
+   * only clicks controls that have an explicit aria-expanded attribute, so
+   * arbitrary/unsafe buttons are never activated here.
+   */
+  clickDisclosure(index: number): Promise<boolean> {
+    if (!chrome?.runtime?.sendMessage) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { type: 'SITEAWARE_CLICK_DISCLOSURE', index },
+        (resp: any) => resolve(Boolean(resp?.clicked)),
+      );
+    });
+  },
+
+  /**
+   * exploreDisclosuresPage — bounded autonomous exploration of every SAFE
+   * navigation disclosure on the CURRENT observed page.
+   *
+   * Loop: identify safe collapsed disclosures → click the first not-yet-
+   * explored one in its current state → wait for stabilization → re-observe →
+   * record link/route delta → ingest revealed links into the existing backend
+   * frontier → repeat until no eligible disclosure remains, a per-page bound is
+   * hit, or consecutive no-delta steps occur.
+   *
+   * Loop protection: tracks (page-route :: control-index :: expanded-state) so
+   * the same disclosure is never re-clicked while in the same meaningful page
+   * state (prevents open → close → open → close churn).
+   *
+   * Safety: only controls with explicit aria-expanded are eligible; never
+   * clicked twice in the same state; bounded by maxDisclosuresPerPage.
+   */
+  async exploreDisclosuresPage(
+    observation: Record<string, any>,
+    sessionId: string,
+    originOverride: string
+  ): Promise<{ explored: Array<{ controlIndex: number; label: string }>; newRoutes: Array<string>; newLinks: Array<string> }> {
+    const explored: Array<{ controlIndex: number; label: string }> = [];
+    const newRoutes: string[] = [];
+    const newLinks: string[] = [];
+    const exploredKeys = new Set<string>();
+    const pageRoute = String(observation.route_template || observation.canonical_path || observation.url || '');
+    const maxDisclosuresPerPage = 20;
+    const maxNoDeltaStreak = 2;
+    let noDeltaStreak = 0;
+    let currentObs = observation;
+
+    for (let step = 0; step < maxDisclosuresPerPage; step++) {
+      const disclosures = this.identifySafeDisclosures(currentObs);
+      // Pick the first not-yet-explored disclosure in its current state.
+      let candidate: { index: number; label: string; ariaExpanded: boolean } | undefined;
+      for (const d of disclosures) {
+        const key = `${pageRoute}::${d.index}::${String(d.ariaExpanded)}`;
+        if (!exploredKeys.has(key)) {
+          candidate = d;
+          break;
+        }
+      }
+      if (!candidate) break; // no eligible disclosure remains in a fresh state
+
+      const key = `${pageRoute}::${candidate.index}::${String(candidate.ariaExpanded)}`;
+      exploredKeys.add(key);
+      const clicked = await this.clickDisclosure(candidate.index);
+      if (!clicked) continue;
+
+      explored.push({ controlIndex: candidate.index, label: candidate.label });
+
+      // Wait for the UI to stabilize.
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Re-observe the page.
+      let after: Record<string, any>;
+      try {
+        after = await this.observeActiveTab();
+      } catch {
+        break;
+      }
+
+      // Compute the newly visible link delta.
+      const delta = this.computeLinkDelta(currentObs, after);
+      if (delta.length === 0) {
+        noDeltaStreak += 1;
+        if (noDeltaStreak >= maxNoDeltaStreak) break;
+        currentObs = after;
+        continue;
+      }
+      noDeltaStreak = 0;
+
+      // Ingest each newly visible link into the existing backend frontier.
+      for (const link of delta) {
+        newLinks.push(link.label);
+        try {
+          const linkObs = {
+            url: saTemplateUuid(String(after.url || '')),
+            title: saClip(after.title || '', 120),
+            language: saClip(after.language || '', 12),
+            direction: after.direction === 'ltr' ? 'ltr' : 'rtl',
+            canonical_path: saTemplateUuid(String(after.canonical_path || after.url || '')),
+            route_template: saTemplateUuid(String(after.canonical_path || after.url || '')),
+            origin: after.origin,
+            links: [link],
+            controls: [],
+            captured_at: new Date().toISOString(),
+            access_scope: 'authenticated',
+          };
+          await this.ingestObservation(sessionId, linkObs, link.href, originOverride);
+        } catch {
+          // Best-effort: continue with other new links even if one fails.
+        }
+        // Normalize the revealed route for frontier/traversal evidence.
+        try {
+          const parsed = new URL(link.href, after.origin || 'https://rousheta.net');
+          newRoutes.push(saTemplateUuid(parsed.origin + parsed.pathname));
+        } catch {
+          newRoutes.push(saTemplateUuid(link.href));
+        }
+      }
+      // Record the safely executed disclosure so the backend counts it
+      // in interactions_explored. Best-effort: never breaks the loop.
+      try {
+        await this.noteInteraction(sessionId);
+      } catch {
+        /* counting must not break discovery */
+      }
+      currentObs = after;
+    }
+
+    return { explored, newRoutes, newLinks };
   },
 
   /**

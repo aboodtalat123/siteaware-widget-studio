@@ -668,10 +668,12 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
       if (controls.length >= 100) break;
       if (!saVisible(node)) continue;
       const tag = (node.tagName || '').toLowerCase();
+      const ariaExpanded = node.getAttribute('aria-expanded');
       controls.push({
         role: node.getAttribute('role') || (tag === 'input' ? 'button' : tag),
         label: saClip(node.getAttribute('aria-label') || node.getAttribute('title') || node.textContent || '', 80),
         index: controls.length,
+        ariaExpanded: ariaExpanded !== null ? ariaExpanded.toLowerCase() === 'true' : undefined,
       });
     }
     return {
@@ -709,6 +711,29 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
     }
   }
 
+  /**
+   * clickDisclosureControl - Programmatically click a disclosed control by index.
+   * Only targets controls that have the aria-expanded attribute (structural signal
+   * of an expandable/collapsible navigation group). Fail-closed: returns false if
+   * the control has no aria-expanded, ensuring we never click arbitrary buttons.
+   * The click dispatches a standard MouseEvent so it works on visible, enabled
+   * controls without executing business actions.
+   */
+  async function clickDisclosureControl(index) {
+    const controls = document.querySelectorAll(SA_CONTROL_SELECTOR);
+    if (index >= controls.length) return false;
+    const node = controls[index];
+    if (!saVisible(node)) return false;
+    // Fail-closed: only click controls that have aria-expanded attribute
+    if (node.getAttribute('aria-expanded') === null) return false;
+    try {
+      node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   function saHighlightTarget(structuralId) {
     saClearHighlight();
     if (!structuralId) return { highlighted: false };
@@ -734,6 +759,28 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
   }
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type === 'SITEAWARE_CLICK_DISCLOSURE') {
+      const { index } = message;
+      let node = null;
+      const allControls = document.querySelectorAll(SA_CONTROL_SELECTOR);
+      if (index >= 0 && index < allControls.length) {
+        node = allControls[index];
+      }
+      let clicked = false;
+      if (node) {
+        const ariaExpanded = node.getAttribute('aria-expanded');
+        if (ariaExpanded !== null) {
+          try {
+            node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            clicked = true;
+          } catch {
+            clicked = false;
+          }
+        }
+      }
+      sendResponse?.({ clicked });
+      return true;
+    }
     if (message?.type === 'SITEAWARE_OBSERVE') {
       try {
         sendResponse?.({ status: 'OBSERVED', observation: collectSafeObservation() });
