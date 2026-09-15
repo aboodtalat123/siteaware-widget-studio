@@ -779,6 +779,37 @@ export const UnifiedSiteAwareExtensionAdapter = {
     });
   },
 
+  /**
+   * Phase 5B: AI-assisted discovery proposal seam.
+   * Gemini runs only on the secure backend and only proposes structural
+   * candidates from sanitized evidence. This method never authorizes or
+   * executes a click; Core D3 must still approve the candidate and the
+   * content script must still perform a fresh live DOM re-match.
+   */
+  async getAiDiscoveryCandidates(
+    sessionId: string,
+    descriptors: Array<Record<string, unknown>>,
+    observation: Record<string, any>,
+    originOverride = '',
+    discoveryStuck = false,
+  ): Promise<{
+    candidates: Array<Record<string, unknown>>;
+    status: string;
+    trigger_reason?: string;
+    deterministic_candidates?: Array<Record<string, unknown>>;
+  }> {
+    return backend(`/api/extension/v1/learning-sessions/${sessionId}/ai-discovery`, {
+      method: 'POST',
+      body: {
+        descriptors: descriptors.slice(0, 200),
+        observation,
+        discovery_stuck: discoveryStuck,
+        force_visual: false,
+      },
+      originOverride,
+    });
+  },
+
   /** Request a same-browser learning pass (service worker owns navigation). */
   async requestLearnPass(args: { origin: string; routes: string[]; maxPages?: number }): Promise<{ status: string; visited: Array<{ route: string; status: string; observation?: any }> }> {
     return new Promise((resolve, reject) => {
@@ -988,8 +1019,38 @@ export const UnifiedSiteAwareExtensionAdapter = {
         const uid = String(a?.element_uid || '');
         if (uid && !approvedByUid.has(uid)) approvedByUid.set(uid, a as Record<string, any>);
       }
-      const approvedUids = new Set(approvedByUid.keys());
-      const target = fresh.find((d) => approvedUids.has(this.descriptorUid(recordByIndex.get(d.index) || {}, d.index)));
+      let approvedUids = new Set(approvedByUid.keys());
+      let target = fresh.find((d) => approvedUids.has(this.descriptorUid(recordByIndex.get(d.index) || {}, d.index)));
+      if (!target) {
+        // Deterministic D3 found no executable disclosure. Ask backend AI
+        // discovery for proposals only, then send the matching original
+        // descriptors back through Core D3. AI candidates are never clicked
+        // directly and cannot bypass live DOM re-match.
+        try {
+          const ai = await this.getAiDiscoveryCandidates(sessionId, descriptors, currentObs, originOverride, true);
+          const aiUids = new Set(
+            (ai.candidates || [])
+              .map((c) => String(c?.element_uid || c?.evidence_id || c?.target_uid || c?.uid || ''))
+              .filter(Boolean),
+          );
+          const aiDescriptors = descriptors.filter((d) => aiUids.has(String(d.element_uid || '')));
+          if (aiDescriptors.length > 0) {
+            const aiVerdict = await this.authorizeInteractions(aiDescriptors);
+            approvals = (aiVerdict && Array.isArray((aiVerdict as any).approvals) ? (aiVerdict as any).approvals : []) as Array<Record<string, any>>;
+            approvedByUid.clear();
+            for (const a of approvals) {
+              const uid = String(a?.element_uid || '');
+              if (uid && !approvedByUid.has(uid)) approvedByUid.set(uid, a as Record<string, any>);
+            }
+            approvedUids = new Set(approvedByUid.keys());
+            target = fresh.find((d) => approvedUids.has(this.descriptorUid(recordByIndex.get(d.index) || {}, d.index)));
+          }
+        } catch {
+          // Backend unavailable/provider unavailable/AI no-candidate all fail
+          // closed. The existing visual-fallback assessment below still records
+          // deterministic evidence without invoking screenshots.
+        }
+      }
       if (!target) break; // every candidate abstained → nothing eligible, no fallback clicks
 
       const targetRec = recordByIndex.get(target.index) || {};
