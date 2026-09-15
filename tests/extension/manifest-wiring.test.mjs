@@ -70,6 +70,13 @@ test('observer emits the backend-required canonical_path', async () => {
   );
 });
 
+test('learn-pass stability budget covers throttled background tabs', async () => {
+  const source = await readFile(SRC_WORKER, 'utf8');
+  const m = /waitForStability\(tabId,\s*timeoutMs\s*=\s*(\d+)\)/.exec(source);
+  assert.ok(m, 'stability timeout must be declared');
+  assert.ok(Number(m[1]) >= 30000, 'budget must cover background throttling');
+});
+
 test('dist ships one canonical extension (no legacy wiring)', async () => {
   const html = await readFile(DIST_HTML, 'utf8');
   assert.ok(html.includes('<div id="root"></div>'));

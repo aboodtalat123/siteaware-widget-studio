@@ -37,7 +37,11 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitForStability(tabId, timeoutMs = 15000) {
+async function waitForStability(tabId, timeoutMs = 30000) {
+  // 30 s budget: learn passes run in a BACKGROUND tab where rendering and
+  // network are throttled; measured foreground settle is ~6-9 s on heavy
+  // Rousheta routes. The 1.5 s quiet bar below stays strict, so genuinely
+  // live pages still report UNSTABLE honestly.
   const deadline = Date.now() + timeoutMs;
   let lastSnapshot = '';
   let quietSince = 0;
@@ -106,11 +110,10 @@ async function runLearningPass({ origin, routes, maxPages }) {
       }
       const observed = await observeTab(tab.id);
       visited.push({ route, status: observed.status || 'UNRESOLVED', observation: observed.observation || null });
-      try {
-        chrome.runtime.sendMessage({ type: 'SITEAWARE_LEARN_PROGRESS', visited: visited.length, route });
-      } catch {
-        /* panel may be closed */
-      }
+      // Best-effort progress broadcast: no receiving panel must never
+      // reject into the learning pass (MV3 sendMessage without a listener
+      // rejects asynchronously, which try/catch cannot intercept).
+      await chrome.runtime.sendMessage({ type: 'SITEAWARE_LEARN_PROGRESS', visited: visited.length, route }).catch(() => {});
     }
   } finally {
     try {

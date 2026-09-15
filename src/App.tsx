@@ -532,6 +532,9 @@ type OwnerPanelProps = {
   ownerMap: Record<string, any> | null;
   ownerAppearance: Record<string, any> | null;
   learnSession: Record<string, any> | null;
+  learnCoverage?: Record<string, any> | null;
+  learnReliability?: Record<string, any> | null;
+  extHealth?: Record<string, any> | null;
   appName: string;
   setAppName: (v: string) => void;
   appUrl: string;
@@ -567,6 +570,7 @@ type OwnerPanelProps = {
   onLearnPass: () => void;
   onDetectDesign: () => void;
   onAutoMatch: () => void;
+  onTakeSiteColors: () => void;
   onSaveAppearance: () => void;
   onTestResolve: () => void;
   onTestHighlight: () => void;
@@ -750,8 +754,8 @@ function OwnerPanel(props: OwnerPanelProps) {
           </div>
           <p className="copilot-intro">
             {ar
-              ? 'بدء التعلم يبدأ من الصفحة الحالية المسجلة ويتابع تلقائيا عبر الحدود الآمنة. الاستكشاف التفاعلي العميق (D3 StateExplorer) غير مربوط بعد في نسخة المتصفح — التنقل بين المسارات والمراقبة البنيوية فقط.'
-              : 'START LEARN seeds from the current authenticated page and traverses automatically via the safe backend frontier. Deep interactive state exploration (D3 StateExplorer) is NOT YET WIRED in this browser build — route traversal + safe observation only.'}
+              ? 'بدء التعلم يبدأ من الصفحة الحالية المسجلة ويتابع تلقائيا عبر الحدود الآمنة. استكشاف الحالة البنيوية الآمنة مفعّل عبر ترخيص Core D3 مع تتبع محدود لتحولات الحالة. إجراءات Stage 6 تبقى معطلة.'
+              : 'START LEARN seeds from the current authenticated page and traverses automatically via the safe backend frontier. Safe structural state exploration is enabled through Core D3 authorization and bounded state transition tracking. Stage 6 actions remain disabled.'}
           </p>
           <div className="copilot-insight-list">
             <OwnerRow label={ar ? 'الجلسة' : 'Session'} value={props.fmtOwner((props.learnSession as any)?.session_id)} />
@@ -762,6 +766,10 @@ function OwnerPanel(props: OwnerPanelProps) {
             <OwnerRow label={ar ? 'العقد / الروابط' : 'Nodes / edges'} value={`${props.fmtOwner((props.learnSession as any)?.nodes_added)} / ${props.fmtOwner((props.learnSession as any)?.edges_added)}`} />
             <OwnerRow label={ar ? 'تفاعلات آمنة' : 'Safe interactions'} value={props.fmtOwner((props.learnSession as any)?.interactions_explored)} />
             <OwnerRow label={ar ? 'مرفوض' : 'Rejected'} value={props.fmtOwner((props.learnSession as any)?.rejected_routes)} />
+            <OwnerRow label={ar ? 'التغطية (D6)' : 'Coverage (D6)'} value={props.fmtOwner((props.learnCoverage as any)?.verdict)} />
+            <OwnerRow label={ar ? 'أسباب التغطية' : 'Coverage reasons'} value={props.fmtOwner(Array.isArray((props.learnCoverage as any)?.reasons) ? (props.learnCoverage as any).reasons.join('; ') : (props.learnCoverage as any)?.reasons)} />
+            <OwnerRow label={ar ? 'سبب الإنهاء (D7)' : 'Termination (D7)'} value={props.fmtOwner((props.learnReliability as any)?.termination_reason)} />
+            <OwnerRow label={ar ? 'صحة الخلفية' : 'Backend health'} value={props.fmtOwner((props.extHealth as any)?.state)} />
           </div>
           <div className="panel-heading">
             <h2>{ar ? 'سجل التمريرات' : 'Pass log'}</h2>
@@ -880,6 +888,7 @@ function OwnerPanel(props: OwnerPanelProps) {
             <OwnerRow label="Grounding" value={props.fmtOwner(props.testResult ? String((props.testResult as any)?.grounded) : '')} />
             <OwnerRow label={ar ? 'الإجابة' : 'Answer'} value={props.fmtOwner((props.testResult as any)?.answer)} />
             <OwnerRow label="Target identity" value={props.fmtOwner((props.testResult as any)?.guide?.target_identity || (props.testResult as any)?.target?.identity)} />
+            <OwnerRow label="Target safe label" value={props.fmtOwner((props.testResult as any)?.target?.safe_label)} />
             <OwnerRow label="Expected route" value={props.fmtOwner((props.testResult as any)?.guide?.expected_route || (props.testResult as any)?.verification?.expected_route)} />
             <OwnerRow label="Structural id" value={props.fmtOwner(props.testStructuralId)} />
             <OwnerRow label="5D highlight" value={props.testHighlightOk === null ? 'UNAVAILABLE / NOT LEARNED' : props.testHighlightOk ? 'HIGHLIGHTED (click manually)' : 'NOT HIGHLIGHTED'} />
@@ -931,6 +940,9 @@ function OwnerPanel(props: OwnerPanelProps) {
           <div className="auto-actions">
             <button className="secondary-button" type="button" onClick={props.onDetectDesign} disabled={props.ownerLoading}>
               {ar ? 'كشف ستايل الموقع' : 'Detect Website'}
+            </button>
+            <button className="primary-button" type="button" onClick={props.onTakeSiteColors} disabled={props.ownerLoading}>
+              {ar ? 'خذ ألوان الموقع وطبّقها' : 'Take Site Colors'}
             </button>
             <button className="secondary-button" type="button" onClick={props.onAutoMatch}>
               {ar ? 'مطابقة تلقائية' : 'Auto Match'}
@@ -1002,6 +1014,10 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
   const [ownerMap, setOwnerMap] = useState<Record<string, any> | null>(null);
   const [ownerAppearance, setOwnerAppearance] = useState<Record<string, any> | null>(null);
   const [learnSession, setLearnSession] = useState<Record<string, any> | null>(null);
+  const [learnCoverage, setLearnCoverage] = useState<Record<string, any> | null>(null);
+  const [learnReliability, setLearnReliability] = useState<Record<string, any> | null>(null);
+  const [extHealth, setExtHealth] = useState<Record<string, any> | null>(null);
+  const [liveWidget, setLiveWidget] = useState<Record<string, any> | null>(null);
   const [appName, setAppName] = useState('Rousheta');
   const [appUrl, setAppUrl] = useState('https://rousheta.net');
   const [appOrigin, setAppOrigin] = useState('https://rousheta.net');
@@ -1022,7 +1038,15 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
   const [assistSending, setAssistSending] = useState(false);
 
   function ownerFail(error: unknown) {
-    const message = error instanceof Error ? error.message : 'UNAVAILABLE:UNKNOWN';
+    let message = error instanceof Error ? error.message : 'UNAVAILABLE:UNKNOWN';
+    // Normalize generic network failures into an actionable backend state.
+    // Developer detail stays in console; UI stays concise and distinguishable.
+    if (/failed to fetch|fetch failed|networkerror|network error|load failed/i.test(message)) {
+      message = 'UNAVAILABLE:BACKEND_UNREACHABLE:http://127.0.0.1:8000';
+    }
+    if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+      try { console.warn('[siteaware-owner]', error); } catch { /* noop */ }
+    }
     setOwnerError(message);
   }
 
@@ -1036,8 +1060,8 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
     setOwnerLoading(true);
     setOwnerError('');
     try {
-      // Ensure LOCAL-DEV runtime session exists before checking readiness
-      await ownerAdapter.ensureLocalDevSession().catch(() => {});
+      // Ensure a normal Extension runtime session exists before checking readiness.
+      await (ownerAdapter as any).ensureRuntimeSession().catch(() => {});
       const [caps, profile, readiness, page, map, appearance] = await Promise.all([
         ownerAdapter.getCapabilities().catch((e) => { throw e; }),
         ownerAdapter.getSiteProfile().catch(() => null),
@@ -1059,13 +1083,32 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
     }
   }
 
+  async function refreshLearnTruth(sessionId: string) {
+    // Canonical D6/D7 truth (best-effort; never breaks the learn loop).
+    // Missing data renders UNAVAILABLE, never 0.
+    try {
+      const cov = await (ownerAdapter as any).getCoverage?.(sessionId).catch(() => null);
+      if (cov?.coverage) setLearnCoverage(cov.coverage as any);
+    } catch { /* truth fetch must not break learning */ }
+    try {
+      const rel = await (ownerAdapter as any).getReliability?.(sessionId).catch(() => null);
+      if (rel) setLearnReliability(rel as any);
+    } catch { /* noop */ }
+    try {
+      const health = await (ownerAdapter as any).getExtensionHealth?.().catch(() => null);
+      if (health) setExtHealth(health as any);
+    } catch { /* noop */ }
+  }
+
   async function handleStartLearn() {
     setOwnerLoading(true);
     setOwnerError('');
     setLearnVisits([]);
     try {
-      // Learn safety net: ensure a local dev session exists before starting learning
-      const ok = await ownerAdapter.ensureLocalDevSession();
+      // Readiness safety net: ensure a normal Extension runtime session exists
+      // before starting learning. This is SiteAware runtime auth only; it does
+      // not read or persist application credentials/cookies.
+      const ok = await (ownerAdapter as any).ensureRuntimeSession();
       if (!ok) throw new Error('UNAVAILABLE:NO_SESSION_TOKEN');
       // START PAGE RULE (single source of truth: resolveLearnSeed):
       // seed from the CURRENT authenticated live page; fall back to the
@@ -1091,21 +1134,21 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
         passTimeoutMs: 60000,
         onProgress: (ev: any) => {
           setLearnSession(ev.session as any);
+          // Deltas only (see runAutoLearn): append chronologically.
           if (Array.isArray(ev.visited) && ev.visited.length) {
             setLearnVisits((previous: Array<{ route: string; status: string }>) => [
-              ...ev.visited.map((v: any) => ({ route: v.route, status: v.status })),
               ...previous,
-            ].slice(0, 30));
+              ...ev.visited.map((v: any) => ({ route: v.route, status: v.status })),
+            ].slice(-30));
           }
         },
       });
       setLearnSession(result.session as any);
-      if (result.visited.length) {
-        setLearnVisits((previous: Array<{ route: string; status: string }>) => [
-          ...result.visited.map((v) => ({ route: v.route, status: v.status })),
-          ...previous,
-        ].slice(0, 30));
-      }
+      // Authoritative full visit list replaces the streamed deltas.
+      setLearnVisits(
+        result.visited.map((v) => ({ route: v.route, status: v.status })).slice(-30),
+      );
+      await refreshLearnTruth((result.session as any)?.session_id || '').catch(() => null);
       await refreshOwnerContext().catch(() => null);
     } catch (error) {
       ownerFail(error);
@@ -1126,6 +1169,7 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
       if (action === 'pause') setLearnSession((await ownerAdapter.pauseLearning(sessionId)) as any);
       if (action === 'resume') setLearnSession((await ownerAdapter.resumeLearning(sessionId)) as any);
       if (action === 'stop') setLearnSession((await ownerAdapter.stopLearning(sessionId)) as any);
+      await refreshLearnTruth(sessionId).catch(() => null);
     } catch (error) {
       ownerFail(error);
     } finally {
@@ -1149,6 +1193,7 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
         }
       }
       setLearnSession((await ownerAdapter.getLearningProgress(sessionId).catch(() => session)) as any);
+      await refreshLearnTruth(sessionId).catch(() => null);
       await refreshOwnerContext().catch(() => null);
     } catch (error) {
       ownerFail(error);
@@ -1190,6 +1235,59 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
     }
   }
 
+  async function handleTakeSiteColors() {
+    setOwnerLoading(true);
+    setOwnerError('');
+    try {
+      const profile = designProfile ?? await ownerAdapter.getDesignProfile();
+      if (!profile) throw new Error('UNAVAILABLE:NO_DESIGN_PROFILE');
+      const appearance = ownerAdapter.autoMatch(profile);
+      const primaryColor = (appearance.primary_color as string) ?? config.appearance.primaryColor;
+      const radiusPx = Number(appearance.radius_px ?? 18);
+      const nextRadius: StudioConfig['appearance']['radius'] = radiusPx >= 24 ? 'xl' : radiusPx >= 16 ? 'lg' : radiusPx >= 10 ? 'md' : 'sm';
+      const nextMode = appearance.theme === 'dark' ? 'dark' : 'light';
+
+      pushDesignHistory(locale === 'ar' ? 'خذ ألوان الموقع' : 'Take site colors');
+      setDesignProfile(profile as any);
+      setOwnerAppearance(appearance);
+      setPendingDesignAction(null);
+      setActiveAutoTheme(null);
+      setThemeMode(nextMode);
+      setConfig((previous) => ({
+        ...previous,
+        theme: nextMode === 'dark' ? 'siteaware-default' : 'neutral-light',
+        themeOrigin: 'auto-brand',
+        chatShell: nextMode === 'dark' ? 'premium' : 'minimal',
+        launcher: 'circle-icon',
+        header: nextMode === 'dark' ? 'header-status' : 'header-minimal',
+        assistantMessage: nextMode === 'dark' ? 'glass' : 'source-first',
+        inputBar: nextMode === 'dark' ? 'glass-composer' : 'pill-input',
+        sendButton: 'send-circle',
+        appearance: {
+          ...previous.appearance,
+          primaryColor,
+          radius: nextRadius,
+          widgetWidth: (appearance.panel_width_px as number) ?? previous.appearance.widgetWidth,
+          widgetHeight: (appearance.panel_height_px as number) ?? previous.appearance.widgetHeight,
+          density: (appearance.density as StudioConfig['appearance']['density']) ?? previous.appearance.density,
+          launcherPosition: 'bottom-right',
+          launcherSize: 'md',
+        },
+      }));
+      setSelectedCategory('theme');
+      setWidgetOpen(true);
+      setDesignSummary(
+        locale === 'ar'
+          ? `أخذت ألوان الموقع وطبقتها على الذكاء. اللون الأساسي: ${primaryColor}`
+          : `Site colors were applied to the assistant. Primary color: ${primaryColor}`,
+      );
+    } catch (error) {
+      ownerFail(error);
+    } finally {
+      setOwnerLoading(false);
+    }
+  }
+
   async function handleSaveAppearance() {
     setOwnerLoading(true);
     setOwnerError('');
@@ -1215,6 +1313,67 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
     }
   }
 
+  // ---- LIVE-SITE widget (real tab; existing content-script contract) ----
+  function liveWidgetFail(stage: string, error: unknown) {
+    const message = error instanceof Error ? error.message : 'UNAVAILABLE:UNKNOWN';
+    setLiveWidget({ status: 'error', stage, detail: message, tabUrl: '' });
+  }
+
+  async function handleApplyLiveWidget() {
+    setOwnerError('');
+    try {
+      const result = await (ownerAdapter as any).renderLiveWidget?.(
+        config as any,
+        { locale, direction: locale === 'ar' ? 'rtl' : 'ltr', open: widgetOpen },
+      );
+      if (!result?.ok) throw new Error('UNAVAILABLE:WIDGET_APPLY_REJECTED');
+      setLiveWidget({ status: 'applied', tabUrl: result.tabUrl, detail: result.logoDropped ? 'APPLIED · custom logo dropped (size)' : 'APPLIED', open: widgetOpen });
+    } catch (error) {
+      liveWidgetFail('apply', error);
+      ownerFail(error);
+    }
+  }
+
+  async function handleUpdateLiveWidget() {
+    setOwnerError('');
+    try {
+      const patch = (ownerAdapter as any).buildLiveWidgetConfig?.(
+        config as any,
+        { locale, direction: locale === 'ar' ? 'rtl' : 'ltr', open: widgetOpen },
+      ) ?? {};
+      const result = await (ownerAdapter as any).updateLiveWidget?.(patch);
+      if (!result?.ok) throw new Error('UNAVAILABLE:WIDGET_UPDATE_REJECTED');
+      setLiveWidget({ status: 'updated', tabUrl: result.tabUrl, detail: 'UPDATED', open: widgetOpen });
+    } catch (error) {
+      liveWidgetFail('update', error);
+      ownerFail(error);
+    }
+  }
+
+  async function handleLiveWidgetOpen(open: boolean) {
+    setOwnerError('');
+    try {
+      const result = await (ownerAdapter as any).setLiveWidgetOpen?.(open);
+      if (!result?.ok) throw new Error('UNAVAILABLE:WIDGET_OPEN_REJECTED');
+      setWidgetOpen(open);
+      setLiveWidget({ status: open ? 'open' : 'closed', tabUrl: result.tabUrl, detail: open ? 'OPEN ON LIVE SITE' : 'CLOSED ON LIVE SITE', open });
+    } catch (error) {
+      liveWidgetFail(open ? 'open' : 'close', error);
+      ownerFail(error);
+    }
+  }
+
+  async function handleRemoveLiveWidget() {
+    setOwnerError('');
+    try {
+      const result = await (ownerAdapter as any).removeLiveWidget?.();
+      setLiveWidget({ status: result?.ok ? 'removed' : 'remove-unconfirmed', tabUrl: result?.tabUrl || '', detail: result?.ok ? 'REMOVED' : 'REMOVE UNCONFIRMED (tab may lack receiver)', open: false });
+    } catch (error) {
+      liveWidgetFail('remove', error);
+      ownerFail(error);
+    }
+  }
+
   async function handleTestResolve() {
     setOwnerLoading(true);
     setOwnerError('');
@@ -1225,8 +1384,9 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
       const result = await ownerAdapter.askAssist(testQuestion.trim(), locale);
       setTestResult(result as any);
       const identity = (result as any)?.guide?.target_identity || (result as any)?.target?.identity || '';
+      const labelHint = (result as any)?.target?.safe_label || '';
       if (identity) {
-        const structuralId = await ownerAdapter.resolveStructuralId(identity).catch(() => '');
+        const structuralId = await ownerAdapter.resolveStructuralId(identity, labelHint).catch(() => '');
         setTestStructuralId(structuralId);
       } else {
         setTestStructuralId('');
@@ -1282,8 +1442,9 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
       const result = await ownerAdapter.askAssist(question, locale);
       setAssistLog((previous) => [...previous, { role: 'assistant', text: (result as any)?.answer || 'UNAVAILABLE / NOT LEARNED' }]);
       const identity = (result as any)?.guide?.target_identity;
+      const labelHint = (result as any)?.target?.safe_label || '';
       if (identity) {
-        const structuralId = await ownerAdapter.resolveStructuralId(identity).catch(() => '');
+        const structuralId = await ownerAdapter.resolveStructuralId(identity, labelHint).catch(() => '');
         if (structuralId) await ownerAdapter.highlightTarget(structuralId).catch(() => null);
       }
     } catch {
@@ -1316,6 +1477,13 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
   }, [themeMode]);
 
   useEffect(() => {
+    // Extension sidepanel context: the legacy relative /api/health URL would
+    // resolve against chrome-extension:// and 404 noisily every poll. The
+    // Unified Extension Adapter owns local backend health; skip this web-mode
+    // poll here. Web Studio behavior below is unchanged.
+    if (typeof window !== 'undefined' && window.location.protocol === 'chrome-extension:') {
+      return;
+    }
     let cancelled = false;
     let intervalId: number | undefined;
 
@@ -2194,8 +2362,19 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
 
   const themeStyle = buildThemeStyle(activeTheme, config.appearance);
   const modeStyle = buildThemeModeStyle(themeMode);
-  const apiStatusLabel =
-    apiHealth?.mode === 'ready'
+  const isExtensionCtx = typeof window !== 'undefined' && (window as any).location?.protocol === 'chrome-extension:';
+  // Extension truth: relative /api/health never runs here (guarded poll), so
+  // derive provider status from the local backend via owner context instead of
+  // collapsing every failure into a generic "unavailable".
+  const extAiLabel: string | null = !isExtensionCtx
+    ? null
+    : /BACKEND_UNREACHABLE|BACKEND_UNAVAILABLE/.test(ownerError || '')
+      ? (locale === 'ar' ? 'الذكاء: الخلفية غير متاحة' : 'AI BACKEND UNAVAILABLE')
+      : ownerCaps
+        ? (locale === 'ar' ? 'الذكاء: الخلفية متصلة · المزود حسب إعداد الخادم' : 'AI BACKEND CONNECTED · provider per server config')
+        : (locale === 'ar' ? 'الذكاء: غير معروف بعد' : 'AI STATUS UNKNOWN YET');
+  const apiStatusLabel = extAiLabel
+    ?? (apiHealth?.mode === 'ready'
       ? locale === 'ar'
         ? 'Gemini متصل'
         : 'Gemini connected'
@@ -2205,7 +2384,7 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
           : 'Gemini disconnected · add API key'
         : locale === 'ar'
           ? 'Gemini غير متاح'
-          : 'Gemini unavailable';
+          : 'Gemini unavailable');
 
   return (
     <div
@@ -2351,6 +2530,9 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
               ownerMap={ownerMap}
               ownerAppearance={ownerAppearance}
               learnSession={learnSession}
+              learnCoverage={learnCoverage}
+              learnReliability={learnReliability}
+              extHealth={extHealth}
               appName={appName}
               setAppName={setAppName}
               appUrl={appUrl}
@@ -2386,6 +2568,7 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
               onLearnPass={handleLearnPassOnce}
               onDetectDesign={handleDetectDesign}
               onAutoMatch={handleAutoMatchApply}
+              onTakeSiteColors={handleTakeSiteColors}
               onSaveAppearance={handleSaveAppearance}
               onTestResolve={handleTestResolve}
               onTestHighlight={handleTestHighlight}
@@ -2907,8 +3090,8 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
         <section className="preview-column">
           <div className="preview-toolbar panel">
             <div className="panel-heading">
-              <h2>{locale === 'ar' ? 'المساعد يعمل على هذا الموقع الآن' : 'Assistant live on this website'}</h2>
-              <span>{locale === 'ar' ? 'بدون محاكي' : 'No simulator'}</span>
+              <h2>{locale === 'ar' ? 'معاينة الاستوديو' : 'Studio preview'}</h2>
+              <span>{locale === 'ar' ? 'محاكاة داخل اللوحة' : 'Simulated in-panel'}</span>
             </div>
               <div className="toolbar-row">
                 <div className="device-toggle" role="tablist" aria-label="Preview size">
@@ -2936,9 +3119,55 @@ function App({ adapter = UnifiedSiteAwareExtensionAdapter }: AppProps) {
               <button className="copilot-template-button" onClick={applyCopilotTemplate} type="button">
                 {locale === 'ar' ? 'طبّق قالب Copilot الجاهز' : 'Apply Copilot Template'}
               </button>
-              <button className={classNames('toggle-launcher', widgetOpen && 'active')} onClick={() => setWidgetOpen((previous) => !previous)}>
-                {widgetOpen ? (locale === 'ar' ? 'الويدجت مفتوح' : 'Widget open') : locale === 'ar' ? 'الويدجت مغلق' : 'Widget closed'}
+              <button className="primary-button" onClick={handleTakeSiteColors} type="button" disabled={ownerLoading}>
+                {locale === 'ar' ? 'خذ ألوان الموقع' : 'Take Site Colors'}
               </button>
+              <button className={classNames('toggle-launcher', widgetOpen && 'active')} onClick={() => setWidgetOpen((previous) => !previous)}>
+                {widgetOpen ? (locale === 'ar' ? 'الويدجت مفتوح (معاينة)' : 'Widget open (preview)') : locale === 'ar' ? 'الويدجت مغلق (معاينة)' : 'Widget closed (preview)'}
+              </button>
+            </div>
+          </div>
+
+          <div className="preview-toolbar panel">
+            <div className="panel-heading">
+              <h2>{locale === 'ar' ? 'الموقع الحي' : 'Live site'}</h2>
+              <span>{locale === 'ar' ? 'التبويب النشط الحقيقي' : 'Real active tab'}</span>
+            </div>
+            <p className="copilot-intro">
+              {locale === 'ar'
+                ? 'يطبق التصميم الحالي على الويدجت الحقيقي في التبويب النشط (http/https فقط). المعاينة أعلاه محاكاة ولا تمس الموقع.'
+                : 'Applies the current design to the real widget on the active tab (http/https only). The preview above is simulated and never touches the site.'}
+            </p>
+            <div className="toolbar-row">
+              <div className="auto-actions">
+                <button className="primary-button" type="button" onClick={handleApplyLiveWidget}>
+                  {locale === 'ar' ? 'طبق على الموقع الحي' : 'Apply to live site'}
+                </button>
+                <button className="secondary-button" type="button" onClick={handleUpdateLiveWidget}>
+                  {locale === 'ar' ? 'حدث الثيم الحي' : 'Update live theme'}
+                </button>
+                <button className="secondary-button" type="button" onClick={() => handleLiveWidgetOpen(true)}>
+                  {locale === 'ar' ? 'افتح على الموقع الحي' : 'Open on live site'}
+                </button>
+                <button className="secondary-button" type="button" onClick={() => handleLiveWidgetOpen(false)}>
+                  {locale === 'ar' ? 'أغلق على الموقع الحي' : 'Close on live site'}
+                </button>
+                <button className="secondary-button" type="button" onClick={handleRemoveLiveWidget}>
+                  {locale === 'ar' ? 'أزل من الموقع الحي' : 'Remove from live site'}
+                </button>
+              </div>
+            </div>
+            <div className="copilot-insight-list">
+              <div className="analysis-card">
+                <strong>{locale === 'ar' ? 'حالة الموقع الحي' : 'Live-site status'}</strong>
+                <span>{liveWidget?.status ? `${liveWidget.status}${liveWidget?.detail ? ` · ${liveWidget.detail}` : ''}` : 'NOT APPLIED YET'}</span>
+              </div>
+              {liveWidget?.tabUrl ? (
+                <div className="analysis-card">
+                  <strong>{locale === 'ar' ? 'التبويب' : 'Tab'}</strong>
+                  <span>{liveWidget.tabUrl}</span>
+                </div>
+              ) : null}
             </div>
           </div>
 

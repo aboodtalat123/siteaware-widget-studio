@@ -654,6 +654,58 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
     return String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
   }
 
+  /**
+   * saDescribeControl — one Core D3-compatible descriptor for a visible
+   * control node, plus preserved migration fields (label/index/ariaExpanded).
+   * Attribute/structure reads only: aria-label for name (never innerText),
+   * no input values, no content. element_uid is an ephemeral per-observation
+   * handle (ctl-{index}), valid only for authorize -> re-match -> execute.
+   */
+  function saDescribeControl(node, index) {
+    const tag = (node.tagName || '').toLowerCase();
+    const ariaExpanded = node.getAttribute('aria-expanded');
+    const ariaControls = saClip(node.getAttribute('aria-controls') || '', 64).split(' ')[0] || '';
+    const ariaDescribedBy = saClip(node.getAttribute('aria-describedby') || '', 64).split(' ')[0] || '';
+    let controlsExists = false;
+    let describedbyIsTooltip = false;
+    try {
+      if (ariaControls && document.getElementById(ariaControls)) controlsExists = true;
+      const describedByNode = ariaDescribedBy ? document.getElementById(ariaDescribedBy) : null;
+      if (describedByNode && describedByNode.getAttribute('role') === 'tooltip') describedbyIsTooltip = true;
+    } catch {
+      controlsExists = false;
+      describedbyIsTooltip = false;
+    }
+    let inForm = false;
+    let insideTablist = false;
+    try {
+      inForm = Boolean(node.closest && node.closest('form'));
+      insideTablist = Boolean(node.closest && node.closest('[role="tablist"]'));
+    } catch {
+      inForm = false;
+      insideTablist = false;
+    }
+    return {
+      element_uid: `ctl-${index}`,
+      tag,
+      role: node.getAttribute('role') || (tag === 'input' ? 'button' : tag),
+      name: saClip(node.getAttribute('aria-label') || '', 80),
+      aria_expanded: ariaExpanded !== null ? ariaExpanded.toLowerCase() === 'true' : null,
+      aria_controls: saClip(node.getAttribute('aria-controls') || '', 64),
+      aria_haspopup: saClip(node.getAttribute('aria-haspopup') || '', 32),
+      aria_describedby: saClip(node.getAttribute('aria-describedby') || '', 64),
+      type: tag === 'input' ? saClip(node.getAttribute('type') || '', 32) : '',
+      disabled: node.disabled === true || String(node.getAttribute('aria-disabled') || '').toLowerCase() === 'true',
+      in_form: inForm,
+      controls_exists: controlsExists,
+      describedby_is_tooltip: describedbyIsTooltip,
+      inside_tablist: insideTablist,
+      label: saClip(node.getAttribute('aria-label') || node.getAttribute('title') || node.textContent || '', 80),
+      index,
+      ariaExpanded: ariaExpanded !== null ? ariaExpanded.toLowerCase() === 'true' : undefined,
+    };
+  }
+
   function collectSafeObservation() {
     const links = [];
     for (const node of document.querySelectorAll('a[href]')) {
@@ -667,14 +719,9 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
     for (const node of document.querySelectorAll(SA_CONTROL_SELECTOR)) {
       if (controls.length >= 100) break;
       if (!saVisible(node)) continue;
-      const tag = (node.tagName || '').toLowerCase();
-      const ariaExpanded = node.getAttribute('aria-expanded');
-      controls.push({
-        role: node.getAttribute('role') || (tag === 'input' ? 'button' : tag),
-        label: saClip(node.getAttribute('aria-label') || node.getAttribute('title') || node.textContent || '', 80),
-        index: controls.length,
-        ariaExpanded: ariaExpanded !== null ? ariaExpanded.toLowerCase() === 'true' : undefined,
-      });
+      // Core D3 descriptor shape + preserved migration fields (see helper).
+      // element_uid is ephemeral per observation, never a persistent identity.
+      controls.push(saDescribeControl(node, controls.length));
     }
     return {
       url: saTemplateUuid(location.href),
@@ -758,24 +805,53 @@ if (!globalThis.__SITEAWARE_WIDGET_STUDIO_LOADED__) {
     return { highlighted: true };
   }
 
+  /**
+   * resolveDisclosureCandidate — Stage-3-style evidence resolution for one
+   * Core-approved descriptor subset. Agreement is required on ALL of:
+   * role, accessible name, expanded state, tag. EXACTLY ONE live control may
+   * match; zero or several means ABSTAIN. The messaged index is NEVER used
+   * for targeting (no positional fallback): DOM reorder must not redirect a
+   * click, and lookalikes must not be guessed. History/self-healing play no
+   * part here by design — only live evidence resolves, or nothing executes.
+   */
+  function resolveDisclosureCandidate(expect) {
+    const abstain = { found: false, node: null };
+    if (!expect || typeof expect !== 'object') return abstain;
+    const wantRole = typeof expect.role === 'string' ? expect.role : '';
+    const wantName = typeof expect.name === 'string' ? expect.name : '';
+    const wantExpanded = typeof expect.aria_expanded === 'boolean' ? expect.aria_expanded : null;
+    const wantTag = typeof expect.tag === 'string' ? expect.tag : '';
+    if (!wantRole || wantExpanded === null || !wantTag) return abstain;
+    let match = null;
+    let count = 0;
+    for (const node of document.querySelectorAll(SA_CONTROL_SELECTOR)) {
+      if (!saVisible(node)) continue;
+      const rawExpanded = node.getAttribute('aria-expanded');
+      if (rawExpanded === null) continue;
+      const tag = (node.tagName || '').toLowerCase();
+      if (tag !== wantTag) continue;
+      const role = node.getAttribute('role') || (tag === 'input' ? 'button' : tag);
+      if (role !== wantRole) continue;
+      if (saClip(node.getAttribute('aria-label') || '', 80) !== wantName) continue;
+      if ((rawExpanded.toLowerCase() === 'true') !== wantExpanded) continue;
+      count += 1;
+      match = node;
+      if (count > 1) return abstain; // ambiguous → no guess
+    }
+    if (count !== 1 || !match) return abstain;
+    return { found: true, node: match };
+  }
+
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.type === 'SITEAWARE_CLICK_DISCLOSURE') {
-      const { index } = message;
-      let node = null;
-      const allControls = document.querySelectorAll(SA_CONTROL_SELECTOR);
-      if (index >= 0 && index < allControls.length) {
-        node = allControls[index];
-      }
+      const verdict = resolveDisclosureCandidate(message?.expect);
       let clicked = false;
-      if (node) {
-        const ariaExpanded = node.getAttribute('aria-expanded');
-        if (ariaExpanded !== null) {
-          try {
-            node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-            clicked = true;
-          } catch {
-            clicked = false;
-          }
+      if (verdict.found && verdict.node) {
+        try {
+          verdict.node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+          clicked = true;
+        } catch {
+          clicked = false;
         }
       }
       sendResponse?.({ clicked });
